@@ -16,7 +16,15 @@ public sealed class AlwaysOnTopService : IDisposable
         public WindowIdentity Identity { get; } = identity;
         public string Title { get; set; } = title;
         public IAlwaysOnTopBorder? Border { get; set; }
+        /// <summary>This window's own appearance; null follows the global settings.</summary>
+        public WindowAppearance? Appearance { get; set; }
+        /// <summary>The original layered state while Llampec has changed the window's opacity.</summary>
+        public OpacityRestore? Opacity;
     }
+
+    // Appearance errors clear themselves on the next successful appearance change.
+    internal const string BorderError = "Could not show the window border.";
+    internal const string TransparencyError = "This window does not support transparency.";
 
     private readonly Func<AlwaysOnTopSettings> _preferences;
     private readonly Func<nint, IAlwaysOnTopBorder> _borderFactory;
@@ -29,7 +37,7 @@ public sealed class AlwaysOnTopService : IDisposable
     private IReadOnlyList<PinnableWindow> _availableWindows = [];
     private WindowIdentity? _lastExternal;
     private WindowIdentity? _target;
-    private bool _targetFrozen, _mutating, _refreshing, _disposed, _notifying, _notifyAgain;
+    private bool _targetFrozen, _mutating, _refreshing, _refreshQueued, _disposed, _notifying, _notifyAgain;
     private (WindowIdentity? Target, string Title, bool Pinned, string? Error)? _publishedState;
     private IReadOnlyList<PinnableWindow> _publishedWindows = [];
 
@@ -176,7 +184,7 @@ public sealed class AlwaysOnTopService : IDisposable
                 // Even a partially failed native operation must remain tracked for cleanup.
                 var newPin = new Pin(identity, after.Title);
                 _pins.Add(identity.Handle, newPin);
-                UpdateBorder(newPin);
+                UpdateAppearance(newPin);
             }
             else _windows.ReleaseClaim(identity);
             if (!succeeded || after is not { IsTopmost: true }) Error = _windows.LastError ?? "Could not pin this window.";
@@ -221,6 +229,8 @@ public sealed class AlwaysOnTopService : IDisposable
             return true;
         }
 
+        // Keep the pin (and its record of the original state) until the window is opaque again.
+        if (!RestoreOpacity(pin)) return false;
         bool succeeded = _windows.TrySetTopmost(pin.Identity, false);
         var after = ReadMatching(pin.Identity);
         if (after is { IsTopmost: true } && _windows.HasClaim(pin.Identity)) return false;
@@ -234,17 +244,44 @@ public sealed class AlwaysOnTopService : IDisposable
         _mutating = true;
         try
         {
-            if (Error == "Could not show the window border.") Error = null;
+            ClearAppearanceError();
             PrunePins();
-            foreach (var pin in _pins.Values) UpdateBorder(pin);
+            foreach (var pin in _pins.Values) UpdateAppearance(pin);
         }
         finally { _mutating = false; Refresh(); }
     }
 
-    private void UpdateBorder(Pin pin)
+    /// <summary>Pinned windows by title, with any appearance of their own, as of the last refresh.</summary>
+    public IReadOnlyList<PinnedWindowAppearance> GetPinnedAppearances()
     {
-        var preferences = _preferences();
-        if (!preferences.ShowBorder)
+        return _pins.Values.OrderBy(pin => pin.Title, StringComparer.CurrentCultureIgnoreCase)
+            .Select(pin => new PinnedWindowAppearance(pin.Identity.Handle, pin.Title, pin.Appearance)).ToArray();
+    }
+
+    /// <summary>Gives one pinned window its own appearance, or null to follow the global settings again.</summary>
+    public void SetWindowAppearance(nint handle, WindowAppearance? appearance)
+    {
+        if (_disposed || _mutating || !_pins.TryGetValue(handle, out var pin)) return;
+        _mutating = true;
+        try
+        {
+            ClearAppearanceError();
+            pin.Appearance = appearance;
+            if (ReadMatching(pin.Identity) is not null) UpdateAppearance(pin);
+        }
+        finally { _mutating = false; Refresh(); }
+    }
+
+    private void ClearAppearanceError()
+    {
+        if (Error is BorderError or TransparencyError) Error = null;
+    }
+
+    private void UpdateAppearance(Pin pin)
+    {
+        var appearance = pin.Appearance ?? _preferences().Appearance;
+        UpdateOpacity(pin, appearance.Alpha);
+        if (!appearance.ShowBorder)
         {
             DisposeBorder(pin);
             return;
@@ -252,14 +289,40 @@ public sealed class AlwaysOnTopService : IDisposable
         try
         {
             pin.Border ??= _borderFactory(pin.Identity.Handle);
-            pin.Border.Update(preferences.BorderThickness);
+            pin.Border.Update(appearance.BorderThickness, appearance.BorderColor);
         }
         catch (Exception ex)
         {
             DisposeBorder(pin);
-            Error = "Could not show the window border.";
+            Error = BorderError;
             Log.Warn($"Always on Top border failed: {ex.Message}");
         }
+    }
+
+    private void UpdateOpacity(Pin pin, byte alpha)
+    {
+        if (alpha == 255)
+        {
+            RestoreOpacity(pin);
+            return;
+        }
+        if (!_windows.TrySetOpacity(pin.Identity, alpha, ref pin.Opacity))
+        {
+            Error = _windows.LastError ?? TransparencyError;
+            Log.Warn($"Always on Top opacity failed for 0x{pin.Identity.Handle:X}: {Error}");
+        }
+    }
+
+    private bool RestoreOpacity(Pin pin)
+    {
+        if (pin.Opacity is not { } original) return true;
+        if (_windows.TryRestoreOpacity(pin.Identity, original))
+        {
+            pin.Opacity = null;
+            return true;
+        }
+        Log.Warn($"Could not restore the opacity of 0x{pin.Identity.Handle:X}: {_windows.LastError}");
+        return false;
     }
 
     private static void DisposeBorder(Pin pin)
@@ -283,6 +346,8 @@ public sealed class AlwaysOnTopService : IDisposable
     private void ForgetPin(Pin pin)
     {
         _pins.Remove(pin.Identity.Handle);
+        // An unpinned window must look as it did before; a closed one needs nothing.
+        RestoreOpacity(pin);
         DisposeBorder(pin);
         // The backend also verifies both identity and the unique marker before removing it.
         _windows.ReleaseClaim(pin.Identity);
@@ -360,17 +425,24 @@ public sealed class AlwaysOnTopService : IDisposable
         {
             if (_pins.TryGetValue(change.Handle, out var pin))
             {
-                if (ReadMatching(pin.Identity) is { IsTopmost: true } && _windows.HasClaim(pin.Identity)) return;
+                if (_windows.IsTopmost(pin.Identity) && _windows.HasClaim(pin.Identity)) return;
             }
             else if (_target is not { } target || target.Handle != change.Handle
                 || ReadMatching(target) is { IsEligible: true }) return;
             // A location event can also report an externally cleared TOPMOST style or a closed
             // target. Only those state changes need a complete refresh; the border follows motion.
         }
-        Refresh();
+        QueueRefresh();
     }
 
-    private bool WindowTrackingNeeded => _targetFrozen || _pins.Count != 0;
+    /// <summary>A burst of window events (titles, reorders) needs one enumeration, not one each.</summary>
+    private void QueueRefresh()
+    {
+        if (_context is null) { Refresh(); return; }
+        if (_refreshQueued) return;
+        _refreshQueued = true;
+        _context.Post(_ => { _refreshQueued = false; Refresh(); }, null);
+    }
 
     /// <summary>Window events matter only while the panel shows them or a pin must be followed.</summary>
     private void UpdateWindowTracking()
@@ -379,7 +451,7 @@ public sealed class AlwaysOnTopService : IDisposable
         // Hooks belong to the owner thread's message loop.
         if (_context is not null && Environment.CurrentManagedThreadId != _ownerThread)
         { _context.Post(_ => UpdateWindowTracking(), null); return; }
-        _windows.SetWindowTracking(WindowTrackingNeeded);
+        _windows.SetWindowTracking(_targetFrozen, _pins.Values.Select(pin => pin.Identity).ToArray());
     }
 
     private void PublishIfChanged()

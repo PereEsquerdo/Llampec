@@ -6,20 +6,27 @@ namespace Llampec.Platform;
 /// Per-monitor HDR state, read and set through the Windows 11 24H2 Connecting and Configuring Displays
 /// (CCD) API -- DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 and DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE.
 /// This is the same mechanism the OS's own Settings &gt; Display &gt; HDR toggle uses on 24H2+; there is no
-/// older-Windows fallback here because Llampec already refuses to run below build 26100 (see
-/// <see cref="OsVersion"/>), so carrying the pre-24H2 advanced-color API would only add an untested path.
+/// older-Windows fallback here because Llampec requires build 26100 (SupportedOSPlatformVersion), so
+/// carrying the pre-24H2 advanced-color API would only add an untested path.
 /// </summary>
 public static class HdrDisplays
 {
-    private const int ErrorInsufficientBuffer = 122;
-
     public readonly record struct Display(DisplayConfig.LUID AdapterId, uint TargetId, string Name, bool Supported, bool Enabled);
 
-    /// <summary>One entry per active display path, in the order QueryDisplayConfig reports them.</summary>
+    /// <summary>
+    /// One entry per active display path, in the order QueryDisplayConfig reports them. Empty when the
+    /// configuration cannot be read, for example without access to the desktop or in a remote session.
+    /// </summary>
     public static IReadOnlyList<Display> GetDisplays()
     {
-        var paths = QueryActivePaths();
-        var displays = new List<Display>(paths.Count);
+        DisplayConfig.DISPLAYCONFIG_PATH_INFO[] paths;
+        try { paths = DisplayConfig.QueryPaths(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, out _); }
+        catch (InvalidOperationException error)
+        {
+            Diagnostics.Log.Warn($"HDR displays are unavailable: {error.Message}");
+            return [];
+        }
+        var displays = new List<Display>(paths.Length);
 
         foreach (var path in paths)
         {
@@ -105,40 +112,4 @@ public static class HdrDisplays
         adapterId = adapterId,
         id = id,
     };
-
-    private static List<DisplayConfig.DISPLAYCONFIG_PATH_INFO> QueryActivePaths()
-    {
-        int result;
-        uint pathCount, modeCount;
-        DisplayConfig.DISPLAYCONFIG_PATH_INFO[] paths;
-
-        do
-        {
-            result = DisplayConfig.GetDisplayConfigBufferSizes(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, out pathCount, out modeCount);
-            if (result != 0)
-            {
-                throw new InvalidOperationException($"GetDisplayConfigBufferSizes failed: {result}");
-            }
-
-            paths = new DisplayConfig.DISPLAYCONFIG_PATH_INFO[pathCount];
-            var modes = new DisplayConfig.DISPLAYCONFIG_MODE_INFO_OPAQUE[modeCount];
-            result = DisplayConfig.QueryDisplayConfig(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes, 0);
-
-            // The display topology can change between GetDisplayConfigBufferSizes and QueryDisplayConfig
-            // (e.g. a monitor is unplugged mid-call); retry with freshly sized buffers, as the Microsoft
-            // sample for QueryDisplayConfig does.
-        } while (result == ErrorInsufficientBuffer);
-
-        if (result != 0)
-        {
-            throw new InvalidOperationException($"QueryDisplayConfig failed: {result}");
-        }
-
-        if (pathCount < paths.Length)
-        {
-            Array.Resize(ref paths, (int)pathCount);
-        }
-
-        return [.. paths];
-    }
 }

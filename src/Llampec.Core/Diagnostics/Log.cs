@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Llampec.Diagnostics;
 
 /// <summary>
-/// Minimal logging: debugger output always; a small rolling text file only when the user enables it in
+/// Minimal logging: debugger output in Debug builds; a small rolling text file only when the user enables it in
 /// settings (see <c>AppSettings.EnableLogFile</c>). Nothing ever leaves the machine.
 /// </summary>
 public static class Log
@@ -45,31 +45,23 @@ public static class Log
 
     private static void Write(string level, string message)
     {
-        string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}";
-        Debug.WriteLine(line);
-
-        string? path;
-        lock (Gate)
-        {
-            path = _filePath;
-        }
-
-        if (path is null)
-        {
-            return;
-        }
-
+#if DEBUG
+        Debug.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [{level}] {message}");
+#endif
+        // Without a log file (the default) nothing is formatted or locked.
+        if (Volatile.Read(ref _filePath) is null) return;
         try
         {
             lock (Gate)
             {
+                if (_filePath is not { } path) return;
                 var info = new FileInfo(path);
                 if (info.Exists && info.Length > 512 * 1024)
                 {
                     File.Delete(path);
                 }
 
-                File.AppendAllText(path, line + Environment.NewLine);
+                File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}");
             }
         }
         catch (IOException)

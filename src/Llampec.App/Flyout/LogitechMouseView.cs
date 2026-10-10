@@ -13,7 +13,7 @@ namespace Llampec.Flyout;
 public sealed class LogitechMouseView : StackPanel, IDisposable
 {
     private readonly LogitechMouseService? _service;
-    private readonly Action _reposition;
+
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TextBlock _status = Note("");
     private readonly TextBlock _message = Note("");
@@ -59,10 +59,10 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
     private bool _busy;
     private bool _disposed;
 
-    public LogitechMouseView(LogitechMouseService? service, Action reposition)
+    public LogitechMouseView(LogitechMouseService? service)
     {
         _service = service;
-        _reposition = reposition;
+
         _draft = App.Current.Settings.Logitech.Clone();
         Spacing = 12;
         _enabled.IsOn = _draft.Enabled;
@@ -124,17 +124,8 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
         ShowMessage(null);
     }
 
-    private static string T(string key) => UiText.Get(key);
 
-    private static TextBlock Note(string key) => new()
-    {
-        Text = T(key), FontSize = 12, TextWrapping = TextWrapping.Wrap,
-    };
 
-    private static TextBlock Section(string key) => new()
-    {
-        Text = T(key), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-    };
 
     private async Task ScanAsync()
     {
@@ -208,7 +199,6 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
         }
         RebuildButtonRows();
         UpdateCapabilities();
-        _reposition();
     }
 
     private void CaptureButtonDraft()
@@ -392,8 +382,7 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
 
     private void OnServiceChanged(object? sender, EventArgs e)
     {
-        if (DispatcherQueue.HasThreadAccess) RefreshStatus();
-        else DispatcherQueue.TryEnqueue(RefreshStatus);
+        OnUi(DispatcherQueue, RefreshStatus);
     }
 
     private void RefreshStatus()
@@ -423,7 +412,6 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
         // Status changes never overwrite unsaved controls. Discovery remains an
         // explicit action, so rebuilding or reopening this page changes nothing.
         UpdateEnabledControls();
-        _reposition();
     }
 
     private void ShowMessage(string? message)
@@ -431,7 +419,6 @@ public sealed class LogitechMouseView : StackPanel, IDisposable
         if (_disposed) return;
         _message.Text = message is null ? "" : T(message);
         _message.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
-        _reposition();
     }
 
     public void Dispose()

@@ -22,15 +22,6 @@ public sealed class CaffeineAction : QuickActionBase, IDisposable
     public override string Title => "Caffeine mode";
     public override string Glyph => "\uEC32";
     public override ActionKind Kind => ActionKind.ToggleWithSubpage;
-    public string StatusText
-    {
-        get
-        {
-            lock (_gate)
-                return Error is not null ? UiText.Get(Error) : _request is null ? UiText.Get("Off")
-                    : EndsAt is null ? UiText.Get("Indefinite") : UiText.Format("Until {0}", EndsAt.Value.ToLocalTime().ToString("t"));
-        }
-    }
 
     public CaffeineAction(Func<CaffeineSettings> preferences, Func<bool, IDisposable>? createRequest = null, TimeProvider? clock = null)
     {

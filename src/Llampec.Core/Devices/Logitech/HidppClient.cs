@@ -211,4 +211,13 @@ public sealed class HidppException(byte errorCode, bool legacy = false)
     : IOException($"HID++ {(legacy ? "1.0" : "2.0")} device error 0x{errorCode:X2}.")
 {
     public byte ErrorCode { get; } = errorCode;
+
+    /// <summary>A HID++ 1.0 (receiver) error rather than a HID++ 2.0 feature error.</summary>
+    public bool Legacy { get; } = legacy;
+
+    /// <summary>
+    /// A receiver reports these while its paired device is off, asleep or out of range:
+    /// connect failed (0x04), busy (0x07), unknown device (0x08) and resource error (0x09).
+    /// </summary>
+    public bool DeviceUnreachable => Legacy && ErrorCode is 0x04 or 0x07 or 0x08 or 0x09;
 }

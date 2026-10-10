@@ -37,8 +37,7 @@ public static class TabletTaskbar
             return Classify(state.Slate, state.Touch, state.Role, state.Expandable, state.Override,
                 state.Remote, state.Convertibility);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
-            or DllNotFoundException or EntryPointNotFoundException)
+        catch (Exception ex) when (IsNativeAccessFailure(ex))
         {
             Diagnostics.Log.Warn($"Could not read taskbar mode: {ex.Message}");
             return TaskbarMode.Unknown;
@@ -152,8 +151,8 @@ public static class TabletTaskbar
         return new(enabled, eligible, mode, eligible ? null : "Not supported");
     }
 
-    private static bool HasPostureOverride(RegistryKey? key) => key?.GetValueNames()
-        .Contains("TabletPostureTaskbar", StringComparer.OrdinalIgnoreCase) == true;
+    // Registry value names are case-insensitive; no need to list every value of Explorer\Advanced.
+    private static bool HasPostureOverride(RegistryKey? key) => key?.GetValue("TabletPostureTaskbar") is not null;
 
     /// <summary>Pure classification, separated from Windows reads so no settings need changing in tests.</summary>
     internal static TaskbarMode Classify(bool slateMode, bool integratedTouch, int platformRole,

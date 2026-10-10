@@ -171,6 +171,67 @@ public class LogitechMouseServiceTests
     }
 
     [Fact]
+    public async Task Silent_present_mouse_stops_timed_retries_and_is_retried_when_the_panel_opens()
+    {
+        var backend = new Backend { Available = false }; var store = new Store(backend.Log); var time = new ManualTime();
+        await using var service = new LogitechMouseService(_ => { }, backend, store, time);
+        await service.ApplyAsync(Enabled());
+        await backend.NextOpenAsync();
+        foreach (int seconds in new[] { 2, 5, 15 })
+        {
+            Assert.Equal(TimeSpan.FromSeconds(seconds), Assert.Single(time.ActiveTimers).Delay);
+            time.Advance(TimeSpan.FromSeconds(seconds));
+            await backend.NextOpenAsync();
+            await service.ScanAsync();
+        }
+        Assert.Empty(time.ActiveTimers);
+        time.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(4, backend.OpenedIdentities.Count);
+
+        backend.Available = true;
+        service.RetryIfDisconnected();
+        await backend.NextOpenAsync();
+        await WaitForAsync(service, status => status.Connected);
+        service.RetryIfDisconnected(); // connected: nothing to do
+        await service.ScanAsync();
+        Assert.Equal(5, backend.OpenedIdentities.Count);
+    }
+
+    [Fact]
+    public async Task Receiver_reporting_an_unreachable_mouse_retries_instead_of_failing()
+    {
+        // HID++ 1.0 resource error: the receiver is present but its paired mouse is off.
+        var backend = new Backend { ApplyError = new HidppException(0x09, legacy: true) };
+        var store = new Store(backend.Log); var time = new ManualTime();
+        await using var service = new LogitechMouseService(_ => { }, backend, store, time);
+
+        await service.ApplyAsync(Enabled());
+
+        Assert.NotEqual(LogitechMouseConnectionState.Error, service.Status.State);
+        Assert.Equal(TimeSpan.FromSeconds(2), Assert.Single(time.ActiveTimers).Delay);
+        Assert.False(new HidppException(0x09).DeviceUnreachable); // the same code from a HID++ 2.0 feature
+    }
+
+    [Fact]
+    public async Task Mouse_reconnection_behind_an_open_path_reapplies_its_settings()
+    {
+        var backend = new Backend(); var store = new Store(backend.Log);
+        await using var service = new LogitechMouseService(_ => { }, backend, store, new ManualTime());
+        await service.ApplyAsync(Enabled());
+        await backend.NextOpenAsync();
+        var first = Assert.Single(backend.Sessions);
+
+        first.Reconnect();
+        await backend.NextOpenAsync();
+        await WaitForAsync(service, status => status.Connected);
+
+        Assert.True(first.Disposed);
+        Assert.Equal(2, backend.Sessions.Count);
+        Assert.Equal(2, backend.Log.Count(entry => entry.StartsWith("apply:", StringComparison.Ordinal)));
+        Assert.Equal("Win+Tab", backend.Sessions[1].Bindings[0xC3]);
+    }
+
+    [Fact]
     public async Task Permanent_configuration_error_does_not_retry_automatically()
     {
         var backend = new Backend { ApplyError = new NotSupportedException("Button unavailable.") };
@@ -482,6 +543,8 @@ public class LogitechMouseServiceTests
             new(1, backend.HardwareDpi, 1000, [], new(200, 8000, 50)), null, false, null, null)
             { UnitId = backend.ReportedUnitId ?? identity.UnitId };
         public event Action<Exception>? ConnectionLost;
+        public event Action? Reconnected;
+        public void Reconnect() => Reconnected?.Invoke();
         public Task<LogitechRestoreState> CaptureAsync(LogitechMouseSettings settings, CancellationToken ct)
         {
             backend.Log.Add($"capture:{backend.HardwareDpi}");

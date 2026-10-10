@@ -25,35 +25,22 @@ public enum ProjectionTopology : uint
 /// </summary>
 public static class ProjectionModes
 {
-    private const int ErrorInsufficientBuffer = 122;
-
     /// <summary>The topology Windows would restore on its own if nothing else changed it since.</summary>
     public static ProjectionTopology GetCurrent()
     {
-        int result;
-        uint pathCount, modeCount, topology;
-        DisplayConfig.DISPLAYCONFIG_PATH_INFO[] paths;
-
-        do
-        {
-            result = DisplayConfig.GetDisplayConfigBufferSizes(DisplayConfig.QDC_DATABASE_CURRENT, out pathCount, out modeCount);
-            if (result != 0)
-            {
-                throw new InvalidOperationException($"GetDisplayConfigBufferSizes failed: {result}");
-            }
-
-            paths = new DisplayConfig.DISPLAYCONFIG_PATH_INFO[pathCount];
-            var modes = new DisplayConfig.DISPLAYCONFIG_MODE_INFO_OPAQUE[modeCount];
-            result = DisplayConfig.QueryDisplayConfigCurrentTopology(
-                DisplayConfig.QDC_DATABASE_CURRENT, ref pathCount, paths, ref modeCount, modes, out topology);
-        } while (result == ErrorInsufficientBuffer);
-
-        if (result != 0)
-        {
-            throw new InvalidOperationException($"QueryDisplayConfig(QDC_DATABASE_CURRENT) failed: {result}");
-        }
-
+        DisplayConfig.QueryPaths(DisplayConfig.QDC_DATABASE_CURRENT, out uint topology);
         return (ProjectionTopology)topology;
+    }
+
+    /// <summary>Null when the configuration cannot be read, for example in a remote session.</summary>
+    public static ProjectionTopology? TryGetCurrent()
+    {
+        try { return GetCurrent(); }
+        catch (InvalidOperationException error)
+        {
+            Diagnostics.Log.Warn($"Display topology is unavailable: {error.Message}");
+            return null;
+        }
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ internal enum FullscreenForegroundDisposition { Target, Preserve, DifferentWindo
 internal interface IFullscreenSession
 {
     FullscreenWindowIdentity Identity { get; }
-    string MonitorDescription { get; }
+
     string MonitorDevice { get; }
     bool OwnsWindow { get; }
     bool IsVisible { get; }
@@ -16,7 +16,8 @@ internal interface IFullscreenSession
     bool IsCloaked { get; }
     bool DisplayUnchanged { get; }
     FullscreenForegroundDisposition ClassifyForeground(nint foreground);
-    void UpdatePointer(long now);
+    /// <param name="targetActive">The fullscreen window has the focus, as just classified by the caller.</param>
+    void UpdatePointer(long now, bool targetActive);
     void ReapplyShellPolicy();
     void RevealTaskbar();
     void CoverTaskbar();

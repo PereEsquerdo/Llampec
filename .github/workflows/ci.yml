@@ -18,7 +18,12 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Test without changing the desktop or display topology
-        run: dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~ActionCatalogTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
+        run: dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~SystemActionTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
+      # Run locally on hardware; CI only keeps them compiling with Core.
+      - name: Build the native smoke test and the Logitech probe
+        run: |
+          dotnet build tests/Llampec.AlwaysOnTop.Smoke -c Release
+          dotnet build tools/Llampec.Logitech.Probe -c Release
 
   build:
     runs-on: windows-latest

@@ -7,30 +7,31 @@ namespace Llampec.ViewModels;
 /// <summary>The panel: an ordered list of tiles and, optionally, an open sub-page.</summary>
 public sealed class FlyoutViewModel : ObservableObject, IDisposable
 {
+    private readonly List<TileViewModel> _tiles = [];
     private TileViewModel? _subpage;
 
     public FlyoutViewModel(IReadOnlyList<IQuickAction> actions, AppSettings settings)
     {
-        var dispatcher = DispatcherQueue.GetForCurrentThread();
         CatalogIds = ModuleCatalog.All.Select(module => module.Id).ToArray();
-        var ordered = OrderAndFilter(actions, settings);
-        Tiles = ordered.Select(a => new TileViewModel(a, dispatcher, OpenSubpage, RunWithPanelHidden)).ToList();
-        BackCommand = new RelayCommand(CloseSubpage);
+        AddTiles(actions, settings);
     }
 
-    public IReadOnlyList<TileViewModel> Tiles { get; }
+    public IReadOnlyList<TileViewModel> Tiles => _tiles;
     /// <summary>Complete action ids, including hidden tiles, for preserving category assignments.</summary>
     public IReadOnlyList<string> CatalogIds { get; }
 
     public void ReplaceActions(IReadOnlyList<IQuickAction> actions, AppSettings settings)
     {
         CloseSubpage();
-        var tiles = (List<TileViewModel>)Tiles;
-        foreach (var tile in tiles) tile.Dispose();
-        tiles.Clear();
+        foreach (var tile in _tiles) tile.Dispose();
+        _tiles.Clear();
+        AddTiles(actions, settings);
+    }
+
+    private void AddTiles(IReadOnlyList<IQuickAction> actions, AppSettings settings)
+    {
         var dispatcher = DispatcherQueue.GetForCurrentThread();
-        tiles.AddRange(OrderAndFilter(actions, settings)
-            .Select(action => new TileViewModel(action, dispatcher, OpenSubpage, RunWithPanelHidden)));
+        _tiles.AddRange(OrderAndFilter(actions, settings).Select(action => new TileViewModel(action, dispatcher, RunWithPanelHidden)));
     }
 
     public void Dispose()
@@ -47,13 +48,6 @@ public sealed class FlyoutViewModel : ObservableObject, IDisposable
             .Where(group => group.Tiles.Count > 0).ToArray();
     }
 
-    public void ApplyOrder(IEnumerable<string> ids)
-    {
-        var tiles = (List<TileViewModel>)Tiles;
-        var byId = tiles.ToDictionary(t => t.Id, StringComparer.Ordinal);
-        var ordered = TileOrdering.Normalize(ids, tiles.Select(t => t.Id)).Select(id => byId[id]).ToList();
-        tiles.Clear(); tiles.AddRange(ordered);
-    }
 
     /// <summary>The tile whose sub-page is open, or null when the main grid is shown.</summary>
     public TileViewModel? Subpage
@@ -69,8 +63,6 @@ public sealed class FlyoutViewModel : ObservableObject, IDisposable
     }
 
     public bool IsSubpageOpen => _subpage is not null;
-
-    public RelayCommand BackCommand { get; }
 
     /// <summary>The window hides the panel, then runs the supplied button action.</summary>
     public event Func<Func<Task>, Task>? RunWithPanelHiddenRequested;

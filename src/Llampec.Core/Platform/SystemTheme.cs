@@ -3,7 +3,7 @@ using Microsoft.Win32;
 
 namespace Llampec.Platform;
 
-/// <summary>Reads the current Windows theme and accent colour (registry + DWM; no WinRT projection needed).</summary>
+/// <summary>Reads the current Windows theme (registry) and accent colour (UISettings, with a DWM fallback).</summary>
 public static class SystemTheme
 {
     public const string PersonalizeKey = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
@@ -11,16 +11,15 @@ public static class SystemTheme
     public const string SystemUsesLightThemeValue = "SystemUsesLightTheme";
 
     /// <summary>True when apps should use the light theme (the value the native Quick Settings panel follows).</summary>
-    public static bool IsAppsLightTheme()
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKey);
-        return key?.GetValue(AppsUseLightThemeValue) is not int v || v != 0;
-    }
+    public static bool IsAppsLightTheme() => IsLight(AppsUseLightThemeValue);
 
-    public static bool IsSystemLightTheme()
+    public static bool IsSystemLightTheme() => IsLight(SystemUsesLightThemeValue);
+
+    /// <summary>A missing or unreadable value means light, the Windows default.</summary>
+    private static bool IsLight(string valueName)
     {
         using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKey);
-        return key?.GetValue(SystemUsesLightThemeValue) is not int v || v != 0;
+        return key?.GetValue(valueName) is not int v || v != 0;
     }
 
     /// <summary>
@@ -45,24 +44,22 @@ public static class SystemTheme
             "ImmersiveColorSet", User32.SMTO_ABORTIFHUNG, 3000, out _);
     }
 
-    /// <summary>Accent colour as 0xAARRGGBB. Falls back to Windows' default blue.</summary>
-    public static uint GetAccentColorArgb()
+    /// <summary>
+    /// The Windows accent color as 0xRRGGBB: the documented UISettings Accent value that apps use
+    /// (SystemAccentColor). DWM's colorization and the DWM AccentColor registry value are darker
+    /// shades meant for window frames. Falls back to DWM colorization, then Windows' default blue.
+    /// </summary>
+    public static uint GetAccentColorRgb()
     {
-        // DWM colorization is the accent colour blended for window frames; the raw accent lives under
-        // HKCU\Software\Microsoft\Windows\DWM\AccentColor as ABGR. Prefer the registry value.
-        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\DWM");
-        if (key?.GetValue("AccentColor") is int abgr)
+        try
         {
-            uint v = unchecked((uint)abgr);
-            uint a = (v >> 24) & 0xFF, b = (v >> 16) & 0xFF, g = (v >> 8) & 0xFF, r = v & 0xFF;
-            return (a << 24) | (r << 16) | (g << 8) | b;
+            var accent = new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
+            return ((uint)accent.R << 16) | ((uint)accent.G << 8) | accent.B;
         }
-
-        if (Dwm.DwmGetColorizationColor(out uint argb, out _) == 0)
+        catch (Exception ex) when (ex is COMException or InvalidCastException or TypeInitializationException)
         {
-            return argb | 0xFF000000;
+            Diagnostics.Log.Warn($"Could not read the accent color: {ex.Message}");
         }
-
-        return 0xFF0078D4;
+        return Dwm.DwmGetColorizationColor(out uint argb, out _) == 0 ? argb & 0xFFFFFF : 0x0078D4;
     }
 }

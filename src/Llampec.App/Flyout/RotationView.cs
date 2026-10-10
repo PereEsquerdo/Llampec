@@ -92,27 +92,18 @@ public sealed class RotationView : StackPanel, IDisposable
         {
             _localError = null;
             settings.IsEnabled = false;
-            try
-            {
-                if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:display")))
-                    throw new InvalidOperationException("Windows did not open display settings.");
-            }
-            catch (Exception ex)
-            {
-                Llampec.Diagnostics.Log.Error("Could not open display settings", ex);
-                if (!_disposed) _localError = "Could not open Windows Settings.";
-            }
-            finally
-            {
-                if (!_disposed) { settings.IsEnabled = true; Update(); }
-            }
+            bool opened = await OpenSettingsAsync("ms-settings:display");
+            if (_disposed) return;
+            if (!opened) _localError = "Could not open Windows Settings.";
+            settings.IsEnabled = true;
+            Update();
         };
         Children.Add(settings);
         _service.Changed += OnChanged;
         Update();
     }
 
-    private static string T(string key) => UiText.Get(key);
+
     private static TextBlock Note() => new() { FontSize = 13, TextWrapping = TextWrapping.Wrap };
     private static string OrientationName(DisplayOrientation orientation) => T(orientation switch
     {
@@ -175,7 +166,7 @@ public sealed class RotationView : StackPanel, IDisposable
 
     private void OnChanged(object? sender, EventArgs args)
     {
-        if (DispatcherQueue.HasThreadAccess) Update(); else DispatcherQueue.TryEnqueue(Update);
+        OnUi(DispatcherQueue, Update);
     }
 
     private void Update()

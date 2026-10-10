@@ -100,6 +100,18 @@ public sealed class LogitechMouseService : IAsyncDisposable
         _commands.Writer.TryWrite(new Wake(WakeReason.DeviceChange));
     }
 
+    /// <summary>
+    /// Tries a disconnected mouse once more; the panel calls this when it opens. A present receiver
+    /// whose mouse is switched off gives no notice when the mouse wakes, and retrying it periodically
+    /// would wake Llampec all day, so opening the panel takes the place of those retries.
+    /// </summary>
+    public void RetryIfDisconnected()
+    {
+        if (Volatile.Read(ref _stopping) != 0 || Status.State is not (LogitechMouseConnectionState.Disconnected
+            or LogitechMouseConnectionState.Error)) return;
+        _commands.Writer.TryWrite(new Wake(WakeReason.PanelOpened));
+    }
+
     public void Suspend()
     {
         if (Volatile.Read(ref _stopping) != 0) return;
@@ -166,6 +178,13 @@ public sealed class LogitechMouseService : IAsyncDisposable
                     case Wake wake:
                         if (wake.Reason == WakeReason.DeviceChange) Interlocked.Exchange(ref _deviceChangeQueued, 0);
                         if (Volatile.Read(ref _stopping) != 0) break;
+                        if (wake.Reason == WakeReason.PanelOpened)
+                        {
+                            // One attempt; a failure does not restart the short retry series.
+                            if (_session is null && _settings.Enabled && !_suspended)
+                                await RunOperationAsync(ct => ReconcileAsync(reopen: false, ct)).ConfigureAwait(false);
+                            break;
+                        }
                         if (wake.Reason == WakeReason.Suspend) _suspended = true;
                         else if (wake.Reason == WakeReason.Resume) _suspended = false;
                         _retryRound = 0;
@@ -177,6 +196,13 @@ public sealed class LogitechMouseService : IAsyncDisposable
                         await DisconnectAsync().ConfigureAwait(false);
                         SetStatus(LogitechMouseConnectionState.Disconnected, null, lost.Error.Message);
                         ScheduleRetry();
+                        break;
+                    case Reconfigure reconfigure:
+                        // The mouse forgets temporary diversions when it reconnects behind a HID
+                        // path that stayed open (a receiver, or Bluetooth while Windows keeps it).
+                        if (reconfigure.Generation != Volatile.Read(ref _sessionGeneration) || _session is null) break;
+                        Log.Info("Logitech mouse reconnected; reapplying settings.");
+                        await RunOperationAsync(ct => ReconcileAsync(reopen: true, ct)).ConfigureAwait(false);
                         break;
                     case Retry retry:
                         if (retry.Version != _retryVersion || Volatile.Read(ref _stopping) != 0 || _suspended) break;
@@ -269,6 +295,7 @@ public sealed class LogitechMouseService : IAsyncDisposable
             long generation = Interlocked.Increment(ref _sessionGeneration);
             _session.ConnectionLost += error => OnConnectionLost(generation, error);
             _session.BatteryChanged += () => _commands.Writer.TryWrite(new BatteryUpdate(generation));
+            _session.Reconnected += () => _commands.Writer.TryWrite(new Reconfigure(generation));
             if (_session.ConnectionError is { } initialError) throw new IOException("The mouse disconnected during discovery.", initialError);
             var snapshot = await _session.CaptureAsync(_settings, ct).ConfigureAwait(false);
             var journal = new LogitechRecoveryJournal(1,
@@ -375,7 +402,6 @@ public sealed class LogitechMouseService : IAsyncDisposable
             try
             {
                 _shortcutSender(shortcut.Text);
-                Log.Info($"Logitech mouse shortcut: {shortcut.Text}");
             }
             catch (Exception error)
             {
@@ -405,8 +431,10 @@ public sealed class LogitechMouseService : IAsyncDisposable
         CancelRetry();
         // An absent HID path returns through Windows device notifications, which wake
         // the service; the slow retry only covers a missed notification. A present but
-        // silent device, such as a receiver whose mouse is off, gives no such notice.
-        int seconds = _retryRound++ switch { 0 => 2, 1 => 5, 2 => 15, _ => absent ? 300 : 15 };
+        // silent device, such as a receiver whose mouse is off, gives no such notice: after
+        // the short series it is tried again only when the panel opens (RetryIfDisconnected).
+        int seconds = _retryRound++ switch { 0 => 2, 1 => 5, 2 => 15, _ => absent ? 300 : 0 };
+        if (seconds == 0) return;
         var cancellation = new CancellationTokenSource();
         _retry = cancellation;
         long version = _retryVersion;
@@ -446,7 +474,7 @@ public sealed class LogitechMouseService : IAsyncDisposable
     }
 
     private static bool IsTransient(Exception error) => error is IOException and not HidppException
-        or TimeoutException or System.ComponentModel.Win32Exception
+        or HidppException { DeviceUnreachable: true } or TimeoutException or System.ComponentModel.Win32Exception
         || error is AggregateException aggregate && aggregate.InnerExceptions.All(IsTransient);
 
     private void ThrowIfStopping() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _stopping) != 0, this);
@@ -459,7 +487,8 @@ public sealed class LogitechMouseService : IAsyncDisposable
     private sealed record Retry(long Version) : Command;
     private sealed record InputFailure(long Epoch, Exception Error) : Command;
     private sealed record BatteryUpdate(long Generation) : Command;
+    private sealed record Reconfigure(long Generation) : Command;
     private sealed record Shortcut(long Epoch, string Text, long Timestamp);
     private sealed record Stop(TaskCompletionSource Completion) : Command;
-    private enum WakeReason { DeviceChange, Suspend, Resume }
+    private enum WakeReason { DeviceChange, Suspend, Resume, PanelOpened }
 }

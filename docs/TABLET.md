@@ -2,6 +2,7 @@
 
 Version **0.2.0-alpha.7** adds **Touch taskbar** and **Rotation lock**.
 The [initial research](TABLET_RESEARCH.md) records the scope and alternatives considered.
+The [touch keyboard and virtual touchpad](TOUCH_INPUT.md) buttons are documented separately.
 Separate follow-up research covers the [native rotation animation](ROTATION_ANIMATION_RESEARCH.md)
 and [global touch mode](GLOBAL_TOUCH_MODE_RESEARCH.md); those features are outside this release.
 Both investigations are now parked under the user's lightweight-product scope.
@@ -152,11 +153,12 @@ restoration now belong to Llampec. See [fullscreen behavior](FULLSCREEN.md) for
 the current implementation and validation limits. It has no trial timeout and
 allows any monitor, including monitors without a local taskbar.
 
-The following records the earlier standalone experiments.
-`tools/test-fullscreen-edge.ps1` and `tools/FullscreenEdgeTrial.cs` test a
-borderless window that covers its monitor while preserving the app's own controls
-and the user's taskbar preferences. This is separate from browser F11 and from
-the earlier `NonRudeHWND` experiment in `tools/test-fullscreen.ps1`.
+The following records the earlier standalone experiments. Their scripts
+(`tools/test-fullscreen-edge.ps1`, `tools/FullscreenEdgeTrial.cs` and the earlier
+`NonRudeHWND` experiment `tools/test-fullscreen.ps1`) were removed on 2026-10-10,
+since the integrated service replaces them; they remain in the git history. They
+tested a borderless window that covers its monitor while preserving the app's own
+controls and the user's taskbar preferences, separate from browser F11.
 
 The user reported that mouse reveal works with conventional taskbar auto-hide
 both enabled and disabled. The native bottom-edge touch gesture also reveals the

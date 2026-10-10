@@ -54,11 +54,14 @@ public sealed class LogitechDevice : IAsyncDisposable
     /// <summary>Raised on the HID reader task when the device reports a battery change.</summary>
     public event Action? BatteryChanged;
 
+    /// <summary>Raised on the HID reader task when the device reports that it reconnected (0x1D4B).</summary>
+    public event Action? Reconnected;
+
     public static async Task<LogitechDevice> CreateAsync(HidppClient client, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         var device = new LogitechDevice(client);
-        foreach (ushort id in new ushort[] { 0x0003, 0x0005, 0x1000, 0x1004, 0x1B04, 0x2201, 0x2110, 0x2111, 0x2121, 0x2150 })
+        foreach (ushort id in new ushort[] { 0x0003, 0x0005, 0x1000, 0x1004, 0x1B04, 0x1D4B, 0x2201, 0x2110, 0x2111, 0x2121, 0x2150 })
         {
             var index = await client.FindFeatureAsync(id, ct).ConfigureAwait(false);
             if (index is > 0) device._features.Add(id, index.Value);
@@ -527,6 +530,14 @@ public sealed class LogitechDevice : IAsyncDisposable
     {
         if (notification.DeviceIndex != DeviceIndex || notification.Function != 0) return;
         if (OnBatteryNotification(notification)) return;
+        if (_features.TryGetValue(0x1D4B, out byte status) && notification.FeatureIndex == status)
+        {
+            // Wireless device status: byte 0 = 1 reconnection, byte 1 = 1 software reconfiguration needed.
+            var p = notification.Parameters;
+            if (p.Length > 1 && (p[0] == 1 || p[1] == 1))
+                try { Reconnected?.Invoke(); } catch { }
+            return;
+        }
         if (!_features.TryGetValue(0x1B04, out byte feature) || notification.FeatureIndex != feature) return;
         var pressedControls = new HashSet<ushort>();
         for (int i = 0; i + 1 < Math.Min(8, notification.Parameters.Length); i += 2)

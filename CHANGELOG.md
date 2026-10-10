@@ -15,6 +15,53 @@
 - Add a **Camera** module that lights up while a camera is capturing and names the
   camera and app, using Windows' documented sensor activity monitor only while the
   panel is visible. Pressing it opens Windows camera settings.
+- Add **Touch keyboard** and **Virtual touchpad** modules. Pressing them hides the
+  panel and opens the tool for the app underneath (the keyboard toggles). Their
+  options show or hide the tool's own taskbar icon, applied immediately; the
+  keyboard can show it only when no keyboard is attached. See
+  [touch input](docs/TOUCH_INPUT.md).
+- Always on Top: the border now uses the real Windows accent color (it used DWM's
+  darker frame shade), and Appearance adds **Border color** with an inline color
+  picker for a custom color.
+- Always on Top: **Opacity** (30–100 %) for pinned windows, restored on unpin and
+  normal exit, and a folded **Per-window appearance** section to give any pinned
+  window its own border, color and opacity for as long as it stays pinned.
+- Choosing a sub-page option no longer leaves its tile disabled with a busy bar
+  until the panel reopens.
+- Code review before the beta:
+  - Fixes: a display-configuration failure (for example in a Remote Desktop session)
+    could stop Llampec at startup through the HDR or Multiple displays tile; both now
+    show as unavailable. Opacity changes skip a hung window instead of waiting on it,
+    and a window whose opacity cannot be restored stays pinned until it can be. The
+    panel's dismissal holds are counted, so one page can no longer release another's,
+    and a rotation started from its page keeps the panel open. Dark mode broadcasts
+    the change off the UI thread. An elevated restart no longer fails while the old
+    instance is exiting.
+  - MX mouse: a receiver reporting its mouse as unreachable retries instead of
+    failing, and a mouse that reconnects behind an open HID path is reconfigured
+    (HID++ 0x1D4B). A switched-off module ignores unrelated device changes. A receiver
+    whose mouse is off is no longer retried every 15 seconds after the first three
+    attempts; opening the panel tries again.
+  - Efficiency: with a window pinned and the panel closed, Always on Top hooks only
+    the pinned processes (plus window destruction) instead of every window, move and
+    caret. Fullscreen finds taskbars directly instead of enumerating every window
+    four times a second, and classifies the foreground once per tick. Multiple
+    displays reads the topology once per refresh instead of eight times; the touch
+    tiles read their registry value once. Borders recolor only on accent or contrast
+    changes. Power, tile and per-window updates are coalesced. Hidden taskbar tiles
+    are no longer refreshed on every setting broadcast. Logging formats nothing when
+    the log file is off.
+  - Clean-up: one display-query helper, one shell-window list, one key-name table
+    (the panel and mouse shortcuts now accept the same keys), shared panel helpers
+    and shortcut editor, a single sub-page view, and removal of the stale
+    `ActionCatalog`, `OsVersion`, unused view-model commands and 15 unused
+    translations. CI now also builds the native smoke test and the Logitech probe.
+    The superseded fullscreen prototypes in `tools/` are removed.
+- x64 validation (Intel, Windows 11 build 26200, commit `85af722`): full Core suite
+  (498 passed, 1 opt-in skipped), opt-in native fullscreen test, 75 Always on Top
+  native checks, fullscreen self-test and the x64 Release package all passed.
+  Logitech hardware, touch editing, tablet controls and touch input remain
+  unchecked on x64.
 - Power options show whether energy saver is on and the battery level that turns it
   on, with a link to its Windows settings.
 - New modules are enabled for existing settings and appear under No category.

@@ -8,23 +8,22 @@ namespace Llampec.ViewModels;
 public sealed class TileViewModel : ObservableObject, IDisposable
 {
     private readonly DispatcherQueue _dispatcher;
-    private readonly Action<TileViewModel>? _openSubpage;
     private readonly Func<Func<Task>, Task>? _runWithPanelHidden;
     private bool _executing;
+    private bool _refreshing;
     private bool _disposed;
 
-    public TileViewModel(IQuickAction action, DispatcherQueue dispatcher, Action<TileViewModel>? openSubpage, Func<Func<Task>, Task>? runWithPanelHidden, bool isRadioItem = false)
+    public TileViewModel(IQuickAction action, DispatcherQueue dispatcher, Func<Func<Task>, Task>? runWithPanelHidden, bool isRadioItem = false)
     {
         Action = action;
         _dispatcher = dispatcher;
-        _openSubpage = openSubpage;
         _runWithPanelHidden = runWithPanelHidden;
         IsRadioItem = isRadioItem;
 
-        ToggleCommand = new RelayCommand(Execute);
-        OpenSubpageCommand = new RelayCommand(() => _openSubpage?.Invoke(this), () => HasSubpage);
-
-        SubTiles = action.SubActions.Select(a => new TileViewModel(a, dispatcher, null, null, action.SubActionsAreExclusive)).ToList();
+        SubTiles = action.SubActions.Select(a => new TileViewModel(a, dispatcher, null, action.SubActionsAreExclusive)).ToList();
+        // IsBusy includes the sub-tiles. A child can finish after the parent's last change
+        // notification, so re-read the parent whenever a child changes.
+        foreach (var sub in SubTiles) sub.PropertyChanged += OnSubTileChanged;
         action.Changed += OnActionChanged;
     }
 
@@ -40,7 +39,6 @@ public sealed class TileViewModel : ObservableObject, IDisposable
     {
         get
         {
-            if (Action is Llampec.Actions.Caffeine.CaffeineAction caffeine) return caffeine.StatusText;
             if (Id == "theme") return ThemeScheduleStatus.Format(!IsOn, App.Current.Scheduler?.Plan, DateTimeOffset.Now, UiText.Language);
             if (Action.Subtitle is not { } text) return null;
             string[] parts = text.Split(" of ", StringSplitOptions.None);
@@ -54,21 +52,17 @@ public sealed class TileViewModel : ObservableObject, IDisposable
         : Subtitle;
     public string Glyph => Action.Glyph;
     public string? GlyphBadge => Action.GlyphBadge;
-    public bool HasGlyphBadge => !string.IsNullOrEmpty(Action.GlyphBadge);
     public bool IsAvailable => Action.IsAvailable;
     public bool IsBusy => _executing || Action.IsBusy || SubTiles.Any(tile => tile.IsBusy);
     public bool IsOn => Action.State == ActionState.On;
     public bool IsMixed => Action.State == ActionState.Mixed;
-    public bool IsButton => Action.Kind == ActionKind.Button;
-    public bool HasSubpage => Action.Kind == ActionKind.ToggleWithSubpage || Id == "theme";
-    public bool HasSubtitle => !string.IsNullOrEmpty(Subtitle);
+    public bool IsButton => Action.Kind is ActionKind.Button or ActionKind.ButtonWithSubpage;
+    public bool HasSubpage => Action.Kind is ActionKind.ToggleWithSubpage or ActionKind.ButtonWithSubpage;
 
     public IReadOnlyList<TileViewModel> SubTiles { get; }
 
-    public RelayCommand ToggleCommand { get; }
-    public RelayCommand OpenSubpageCommand { get; }
-
-    private void Execute()
+    /// <summary>Runs the action (a button press, switch or radio choice) unless it is busy or unavailable.</summary>
+    public void Toggle()
     {
         if (_disposed || IsBusy || !IsAvailable) return;
         _ = ExecuteAndRefreshThemeAsync();
@@ -99,11 +93,14 @@ public sealed class TileViewModel : ObservableObject, IDisposable
     public void Refresh()
     {
         if (_disposed) return;
-        Action.Refresh();
-        foreach (var sub in SubTiles)
+        // Each changed property would otherwise notify the tile; notify once at the end.
+        _refreshing = true;
+        try
         {
-            sub.Action.Refresh();
+            Action.Refresh();
+            foreach (var sub in SubTiles) sub.Refresh();
         }
+        finally { _refreshing = false; }
         // Computed text (for example a scheduled countdown) can change independently
         // of the action's state and therefore without an Action.Changed notification.
         RaiseAll();
@@ -121,9 +118,11 @@ public sealed class TileViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void OnSubTileChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RaiseAll();
+
     private void RaiseAll()
     {
-        if (_disposed) return;
+        if (_disposed || _refreshing) return;
         // Cheap and simple: the tile re-reads every bound property.
         OnPropertyChanged(string.Empty);
     }
@@ -133,6 +132,10 @@ public sealed class TileViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         Action.Changed -= OnActionChanged;
-        foreach (var child in SubTiles) child.Dispose();
+        foreach (var child in SubTiles)
+        {
+            child.PropertyChanged -= OnSubTileChanged;
+            child.Dispose();
+        }
     }
 }

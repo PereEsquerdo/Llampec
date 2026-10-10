@@ -32,7 +32,7 @@ public sealed class KeyboardShortcut
         // Skip rather than release keys the user is physically holding. This
         // avoids interfering with an in-progress keyboard chord.
         ushort[] guards = [0x10, 0x11, 0x12, 0x5B, 0x5C, _keys[^1]];
-        if (guards.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0))
+        if (guards.Any(key => (Interop.User32.GetAsyncKeyState(key) & 0x8000) != 0))
         {
             return false;
         }
@@ -57,24 +57,11 @@ public sealed class KeyboardShortcut
 
     private static bool IsModifier(ushort key) => key is 0x10 or 0x11 or 0x12 or 0x5B;
 
-    private static ushort ParseKey(string text)
+    private static ushort ParseKey(string text) => text.ToUpperInvariant() switch
     {
-        string key = text.ToUpperInvariant();
-        if (key.Length == 1 && (key[0] is >= 'A' and <= 'Z' or >= '0' and <= '9')) return key[0];
-        if (key.StartsWith('F') && int.TryParse(key.AsSpan(1), out int number) && number is >= 1 and <= 24)
-            return (ushort)(0x70 + number - 1);
-        return key switch
-        {
-            "CTRL" or "CONTROL" => 0x11, "ALT" => 0x12, "SHIFT" => 0x10, "WIN" or "WINDOWS" => 0x5B,
-            "TAB" => 0x09, "ENTER" => 0x0D, "ESC" or "ESCAPE" => 0x1B, "SPACE" => 0x20,
-            "BACKSPACE" => 0x08, "DELETE" => 0x2E, "INSERT" => 0x2D,
-            "HOME" => 0x24, "END" => 0x23, "PAGEUP" => 0x21, "PAGEDOWN" => 0x22,
-            "LEFT" => 0x25, "UP" => 0x26, "RIGHT" => 0x27, "DOWN" => 0x28,
-            "VOLUMEUP" => 0xAF, "VOLUMEDOWN" => 0xAE, "VOLUMEMUTE" => 0xAD,
-            "MEDIAPLAYPAUSE" => 0xB3, "MEDIANEXT" => 0xB0, "MEDIAPREVIOUS" => 0xB1,
-            _ => throw new ArgumentException($"Unsupported shortcut key: {text}.")
-        };
-    }
+        "CTRL" or "CONTROL" => 0x11, "ALT" => 0x12, "SHIFT" => 0x10, "WIN" or "WINDOWS" => 0x5B,
+        _ => KeyNames.TryParse(text, out ushort key) ? key : throw new ArgumentException($"Unsupported shortcut key: {text}."),
+    };
 
     private static Input MakeInput(ushort key, bool release) => new()
     {
@@ -105,6 +92,5 @@ public sealed class KeyboardShortcut
     private struct MouseInput { public int X; public int Y; public uint Data; public uint Flags; public uint Time; public nuint ExtraInfo; }
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint count, Input[] inputs, int size);
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int virtualKey);
+
 }

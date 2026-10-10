@@ -23,6 +23,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.9" />
     <ProjectReference Include="..\Llampec.Core\Llampec.Core.csproj" />
     <Using Include="System.Runtime.InteropServices" />
+    <Using Include="Llampec.Flyout.PanelControls" Static="true" />
     <Content Include="Assets\Llampec.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../docs/third-party/Mouser.LICENSE.txt" Link="licenses/Mouser.LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

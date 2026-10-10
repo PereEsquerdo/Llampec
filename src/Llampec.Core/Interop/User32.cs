@@ -6,6 +6,9 @@ public static partial class User32
     [LibraryImport("user32.dll")]
     public static partial uint GetDpiForWindow(nint hwnd);
 
+    [LibraryImport("user32.dll")]
+    public static partial nint GetDesktopWindow();
+
     public const int WM_SETTINGCHANGE = 0x001A;
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_CONTEXTMENU = 0x007B;

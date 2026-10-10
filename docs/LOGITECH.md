@@ -62,8 +62,15 @@ HID read failures and Windows device/power events drive reconnection. Retries ba
 off after 2, 5 and 15 seconds. When the configured HID path is absent, its return
 is reported by Windows device notifications, so further retries wait 5 minutes
 only to cover a missed notification. A present device that does not answer, such
-as a receiver whose mouse is switched off, keeps 15-second retries because Windows
-gives no notice when the mouse wakes. A healthy connected
+as a receiver whose mouse is switched off, gives no notice when the mouse wakes.
+After those three retries it is tried again only when the Llampec panel opens,
+rather than every 15 seconds all day (the user's choice on 2026-10-10). The receiver's HID++ 1.0 errors for an
+unreachable device (connect failed, busy, unknown device, resource error) count as
+such a retry, not as a permanent error. When a mouse reconnects behind a HID path
+that stayed open, it reports HID++ Wireless Device Status (0x1D4B) and forgets its
+temporary button diversions; Llampec then reopens the session and reapplies the
+saved settings. This reconnection path has unit tests but no hardware validation
+yet. A healthy connected
 session waits for input and battery events without periodic HID queries, battery polling or keep-alive.
 Suspension stops input dispatch; resuming establishes a fresh session. No kernel
 driver, Python/Qt runtime or separate background process is installed.

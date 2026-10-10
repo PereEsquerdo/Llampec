@@ -116,7 +116,9 @@ public partial class App : Application
                     {
                         Rotation?.Refresh();
                         Fullscreen?.OnEnvironmentChanged();
-                        foreach (var tile in model.Tiles.Where(t => t.Id is "taskbar-autohide" or "touch-taskbar")) tile.Refresh();
+                        // Hidden tiles are refreshed when the panel opens.
+                        if (window.AppWindow.IsVisible)
+                            foreach (var tile in model.Tiles.Where(t => t.Id is "taskbar-autohide" or "touch-taskbar")) tile.Refresh();
                         window.OnDisplayEnvironmentChanged();
                     }
                     catch (Exception error) { Log.Warn($"Could not refresh tablet/display state: {error.Message}"); }
@@ -133,7 +135,9 @@ public partial class App : Application
             _events.HidDeviceChanged += (_, path) =>
             {
                 if (LogitechMouse is not { } mouse) return;
-                if (mouse.Status.RecoveryPending || (path is null && !mouse.Status.Connected)
+                // A switched-off mouse needs no wake-up for unrelated device changes.
+                if (mouse.Status.RecoveryPending
+                    || (path is null && !mouse.Status.Connected && Settings.Logitech.Enabled)
                     || string.Equals(path, Settings.Logitech.DevicePath, StringComparison.OrdinalIgnoreCase))
                     mouse.NotifyDeviceChange();
             };
@@ -150,7 +154,7 @@ public partial class App : Application
             _events.HotkeyPressed += (_, id) =>
             {
                 if (_modulesChanging) return;
-                if (id == 1) window.Toggle();
+                if (id == OpenPanelHotkeyId) window.Toggle();
                 else if (id == _alwaysOnTopHotkey?.RegisteredId)
                 {
                     AlwaysOnTop?.ToggleForeground();
@@ -164,7 +168,6 @@ public partial class App : Application
             };
             RegisterOpenPanelHotkey();
             LogModuleRuntime();
-            _events.SettingChanged += (_, _) => AlwaysOnTop?.ApplyAppearance();
             _showWait = ThreadPool.RegisterWaitForSingleObject(_showEvent,
                 (_, _) => window.DispatcherQueue.TryEnqueue(window.ShowPanel), null, -1, false);
             _exitWait = ThreadPool.RegisterWaitForSingleObject(_exitEvent,
@@ -206,9 +209,9 @@ public partial class App : Application
     public void RegisterOpenPanelHotkey()
     {
         if (_events is null) return;
-        _events.UnregisterHotkey(1);
+        _events.UnregisterHotkey(OpenPanelHotkeyId);
         if (Hotkey.TryParse(Settings.Hotkey, out var hotkey))
-            _events.RegisterHotkey(1, hotkey.Modifiers, hotkey.VirtualKey);
+            _events.RegisterHotkey(OpenPanelHotkeyId, hotkey.Modifiers, hotkey.VirtualKey);
     }
 
     public void RefreshTheme()
@@ -220,8 +223,12 @@ public partial class App : Application
         && (Llampec.Interop.User32.GetAsyncKeyState(0x01) < 0 || Llampec.Interop.User32.GetAsyncKeyState(0x02) < 0);
     public void SaveSettings() => SettingsStore.Save(Settings);
 
-    /// <summary>Starts camera observation while the panel is visible and stops it when hidden.</summary>
-    public void SetPanelVisible(bool visible) => _cameraAction?.SetObserving(visible && !_exiting);
+    /// <summary>Observes the camera while the panel is visible; opening it also retries a disconnected mouse.</summary>
+    public void SetPanelVisible(bool visible)
+    {
+        _cameraAction?.SetObserving(visible && !_exiting);
+        if (visible) LogitechMouse?.RetryIfDisconnected();
+    }
 
     private void SendLogitechShortcut(string shortcut)
     {
@@ -270,45 +277,33 @@ public partial class App : Application
         finally { _logitechSettingsGate.Release(); }
     }
 
-    public bool TrySetAlwaysOnTopHotkey(string text, out string? error)
+    public bool TrySetAlwaysOnTopHotkey(string text, out string? error) => TrySetHotkey(_alwaysOnTopHotkey, text,
+        () => Settings.AlwaysOnTop.Hotkey, value => Settings.AlwaysOnTop.Hotkey = value, out error);
+
+    public bool TrySetFullscreenHotkey(string text, out string? error) => TrySetHotkey(_fullscreenHotkey, text,
+        () => Settings.Fullscreen.Hotkey, value => Settings.Fullscreen.Hotkey = value, out error);
+
+    /// <summary>Reserves the new shortcut, saves it, and keeps the old one if either step fails.</summary>
+    private bool TrySetHotkey(ConfigurableHotkey? hotkey, string text, Func<string> read, Action<string> write, out string? error)
     {
-        if (_alwaysOnTopHotkey is null)
+        if (hotkey is null)
         {
             error = "Shortcut is already in use.";
             return false;
         }
-        bool success = _alwaysOnTopHotkey.TrySet(text, normalized =>
+        bool success = hotkey.TrySet(text, normalized =>
         {
-            var preferences = Settings.AlwaysOnTop;
-            string previous = preferences.Hotkey;
-            preferences.Hotkey = normalized;
+            string previous = read();
+            write(normalized);
             if (SettingsStore.Save(Settings)) return true;
-            preferences.Hotkey = previous;
+            write(previous);
             return false;
         });
-        error = _alwaysOnTopHotkey.Error;
+        error = hotkey.Error;
         return success;
     }
 
-    public bool TrySetFullscreenHotkey(string text, out string? error)
-    {
-        if (_fullscreenHotkey is null)
-        {
-            error = "Shortcut is already in use.";
-            return false;
-        }
-        bool success = _fullscreenHotkey.TrySet(text, normalized =>
-        {
-            var preferences = Settings.Fullscreen;
-            string previous = preferences.Hotkey;
-            preferences.Hotkey = normalized;
-            if (SettingsStore.Save(Settings)) return true;
-            preferences.Hotkey = previous;
-            return false;
-        });
-        error = _fullscreenHotkey.Error;
-        return success;
-    }
+
 
     public bool TryRestartAsAdministrator(out string? error)
     {
@@ -335,7 +330,7 @@ public partial class App : Application
         try { if (Rotation is { } rotation) await rotation.DisposeAsync(); }
         catch (Exception ex) { Log.Error("Could not complete pending display recovery on exit.", ex); }
         _rotationAction?.Dispose();
-        try { LogitechMouse?.StopAsync().GetAwaiter().GetResult(); }
+        try { if (LogitechMouse is { } mouse) await mouse.StopAsync(); }
         catch (Exception ex) { Log.Error("Logitech shutdown could not complete restoration; recovery is retained for the next launch.", ex); }
         _mouseAction?.Dispose();
         _cameraAction?.Dispose();

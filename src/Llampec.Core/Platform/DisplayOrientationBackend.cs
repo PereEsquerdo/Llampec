@@ -125,18 +125,7 @@ public sealed class DisplayOrientationBackend : IDisplayOrientationBackend
 
     private static DisplayConfig.DISPLAYCONFIG_PATH_INFO[] QueryPaths()
     {
-        // Bound retries: repeatedly changing topology must not block the UI indefinitely.
-        for (int attempt = 0; attempt < 4; attempt++)
-        {
-            int result = DisplayConfig.GetDisplayConfigBufferSizes(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, out uint count, out uint modesCount);
-            if (result != 0) break;
-            var paths = new DisplayConfig.DISPLAYCONFIG_PATH_INFO[count];
-            var modes = new DisplayConfig.DISPLAYCONFIG_MODE_INFO_OPAQUE[modesCount];
-            result = DisplayConfig.QueryDisplayConfig(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, ref count, paths, ref modesCount, modes, 0);
-            if (result == 122) continue;
-            if (result != 0) break;
-            return paths.Take((int)count).ToArray();
-        }
-        throw new DisplayOrientationException("Display configuration unavailable");
+        try { return DisplayConfig.QueryPaths(DisplayConfig.QDC_ONLY_ACTIVE_PATHS, out _); }
+        catch (InvalidOperationException) { throw new DisplayOrientationException("Display configuration unavailable"); }
     }
 }

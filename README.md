@@ -39,7 +39,9 @@ Llampec lives in the notification area and provides fourteen configurable quick 
 - **Caffeine:** prevent automatic sleep for a chosen duration, optionally keeping
   the display on.
 - **Always on Top:** pin the last active window, use a configurable shortcut, or
-  choose windows from a list. An optional accent-colored border has adjustable thickness.
+  choose windows from a list. An optional border has adjustable thickness and uses the Windows accent color
+  or a custom color. Pinned windows can be made translucent; a folded section
+  adjusts each pinned window separately.
 - **Screenshot:** close the panel, then open the native Windows capture selector
   with **Win+Shift+S**.
 - **Fullscreen:** press **Ctrl+Alt+F** or its Llampec button to fill the active
@@ -56,6 +58,10 @@ Llampec lives in the notification area and provides fourteen configurable quick 
   the mouse reports. Its options hold the button, DPI and wheel configuration.
 - **Camera:** lights up while a camera is capturing and names the camera and the app
   using it. Pressing it opens Windows camera settings. See [camera](docs/CAMERA.md).
+- **Touch keyboard** and **Virtual touchpad:** open Windows' touch input tools when
+  an app is hard to use with fingers. Their options show or hide each tool's own
+  taskbar icon; the keyboard can also show it only when no keyboard is attached.
+  See [touch input](docs/TOUCH_INPUT.md).
 
 The pencil at the bottom of the panel (or **Settings → Buttons and categories**)
 opens the visual editor. The panel uses **1–6 columns** (default **3**) and adapts
@@ -192,7 +198,7 @@ Use `win-x64` instead for x64.
 Run the tests used by CI without accessing the active display setup:
 
 ```powershell
-dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~ActionCatalogTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
+dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~SystemActionTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
 ```
 
 The excluded integration tests inspect the real Windows session, and
@@ -210,6 +216,17 @@ verified tablet controls and orientation on the same device. Hardware limits and
 the separate investigation of global tablet posture are recorded in
 [tablet controls](docs/TABLET.md). The global touch-mode experiment is deferred to
 a future version and is outside this release's scope.
+
+x64 validation on 2026-10-10 (commit `85af722`, Intel Core i7-1065G7, Windows 11
+build 26200): the full Core suite passed (498 passed, 1 opt-in skipped) and the
+opt-in native fullscreen test passed. The Always on Top smoke test passed its
+75 native checks, and the fullscreen self-test passed normal/maximized fullscreen
+and rollback. The x64 Release package built and passed the resource check.
+Started in the background, the published build idled at about 5 MB private
+working set until a later rise to about 40 MB, probably from opening the panel
+(unconfirmed). On x64, the Logitech module with real hardware, touchscreen dragging
+in the editor, tablet controls and the touch keyboard/touchpad buttons are not
+yet covered.
 
 HDR's per-monitor list is captured at startup. Restart Llampec after connecting a
 new monitor to add it to that list; unplugged monitors are disabled. ARM64 and x64
@@ -231,6 +248,7 @@ Developer documentation:
 - [Screenshot](docs/SCREENSHOT.md)
 - [Power](docs/POWER.md)
 - [Camera](docs/CAMERA.md)
+- [Touch keyboard and virtual touchpad](docs/TOUCH_INPUT.md)
 - [Tablet controls and orientation](docs/TABLET.md)
 - [Future rotation-animation research](docs/ROTATION_ANIMATION_RESEARCH.md)
 - [Future global touch-mode research](docs/GLOBAL_TOUCH_MODE_RESEARCH.md)

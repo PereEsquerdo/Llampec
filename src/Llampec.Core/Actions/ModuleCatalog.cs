@@ -22,5 +22,7 @@ public static class ModuleCatalog
         new("power", "Power", "\uEC4A", null, true),
         new("mouse", "MX mouse", "\uE962", null, true),
         new("camera", "Camera", "\uE722", null, false),
+        new("touch-keyboard", "Touch keyboard", "\uE765", null, true),
+        new("touchpad", "Virtual touchpad", "\uEFA5", null, true),
     ]);
 }

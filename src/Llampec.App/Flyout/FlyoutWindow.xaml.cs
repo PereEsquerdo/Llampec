@@ -25,15 +25,11 @@ public sealed partial class FlyoutWindow : Window, IDisposable
     private readonly FlyoutViewModel _model;
     private readonly List<Action> _unsubscribe = [];
     private readonly List<Action> _subUnsubscribe = [];
-    private bool _dialogOpen;
+    /// <summary>Open dialogs and operations that must keep the panel open when it loses focus.</summary>
+    private int _holds;
     private bool _disposed;
     private readonly nint _hwnd;
-    private ThemeScheduleView? _scheduleView;
-    private CaffeineView? _caffeineView;
-    private AlwaysOnTopView? _alwaysOnTopView;
-    private FullscreenView? _fullscreenView;
-    private RotationView? _rotationView;
-    private PowerView? _powerView;
+    private IDisposable? _subpageView;
     private int _observedPinCount;
     private bool _observedFullscreenActive;
     private bool _closing;
@@ -91,8 +87,10 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         {
             // A mouse-down on our tray icon deactivates us BEFORE NIN_SELECT arrives.
             // Let that callback toggle once, rather than hiding here and reopening there.
-            if (e.WindowActivationState == WindowActivationState.Deactivated && !_dialogOpen
-                && !_model.Tiles.Any(t => t.Id == "rotation" && t.IsBusy))
+            // A display reconfiguration also deactivates the panel; keep it while rotation runs,
+            // whether started from the tile or from its page.
+            if (e.WindowActivationState == WindowActivationState.Deactivated && !IsHeld
+                && App.Current.Rotation?.IsBusy != true)
             {
                 bool trayPress = App.Current.IsPointerPressOnTrayIcon();
                 Log.Info($"Panel deactivated: trayPress={trayPress}");
@@ -101,6 +99,11 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         };
         AppWindow.Closing += (_, e) => { e.Cancel = true; HidePanel(); };
     }
+
+    private bool IsHeld => _holds > 0 || _savingEditor || _editorDragging;
+
+    /// <summary>Paired calls from a dialog or long operation; holds from different owners add up.</summary>
+    private void Hold(bool hold) => _holds = Math.Max(0, _holds + (hold ? 1 : -1));
 
     public void ApplyTheme()
     {
@@ -185,7 +188,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         button.HorizontalAlignment = HorizontalAlignment.Stretch;
         button.HorizontalContentAlignment = HorizontalAlignment.Center;
         AutomationProperties.SetName(button, tile.Title);
-        button.Click += (_, _) => tile.ToggleCommand.Execute(null);
+        button.Click += (_, _) => tile.Toggle();
         face.Children.Add(button);
         Button? more = null;
         if (tile.HasSubpage)
@@ -222,17 +225,10 @@ public sealed partial class FlyoutWindow : Window, IDisposable
             Style = (Style)Root.Resources["TileStatusStyle"],
             Visibility = Visibility.Collapsed,
         };
-        if (tile.Id == "always-on-top")
-        {
-            subtitle.MaxLines = 2;
-            subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
-            caption.Children.Add(pinnedCount);
-        }
-        if (tile.Id is "fullscreen" or "camera" or "power" or "mouse")
-        {
-            subtitle.MaxLines = 2;
-            subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
-        }
+        // The tooltip and accessible help carry the full subtitle.
+        subtitle.MaxLines = 2;
+        subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
+        if (tile.Id == "always-on-top") caption.Children.Add(pinnedCount);
         var busy = new ProgressBar
         {
             Height = 2, VerticalAlignment = VerticalAlignment.Bottom,
@@ -244,23 +240,26 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         stack.Children.Add(caption);
         void Update()
         {
-            button.IsEnabled = tile.IsAvailable && !tile.IsBusy;
+            // Each property is computed; read them once per update.
+            string? text = tile.Subtitle;
+            bool busyNow = tile.IsBusy;
+            button.IsEnabled = tile.IsAvailable && !busyNow;
             if (button is ToggleButton toggle) toggle.IsChecked = tile.IsOn || tile.IsMixed;
             if (more is not null)
                 more.Style = tile.IsOn || tile.IsMixed ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
             subtitle.Text = tile.CompactSubtitle ?? "";
-            subtitle.Visibility = tile.HasSubtitle ? Visibility.Visible : Visibility.Collapsed;
-            ToolTipService.SetToolTip(subtitle, tile.Subtitle);
-            ToolTipService.SetToolTip(button, string.IsNullOrEmpty(tile.Subtitle) ? tile.Title : $"{tile.Title}\n{tile.Subtitle}");
-            busy.Visibility = tile.IsBusy ? Visibility.Visible : Visibility.Collapsed;
-            busy.IsIndeterminate = tile.IsBusy;
-            AutomationProperties.SetHelpText(button, tile.IsMixed ? T("Some displays are on") : tile.Subtitle ?? "");
+            subtitle.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+            ToolTipService.SetToolTip(subtitle, text);
+            ToolTipService.SetToolTip(button, string.IsNullOrEmpty(text) ? tile.Title : $"{tile.Title}\n{text}");
+            busy.Visibility = busyNow ? Visibility.Visible : Visibility.Collapsed;
+            busy.IsIndeterminate = busyNow;
+            AutomationProperties.SetHelpText(button, tile.IsMixed ? T("Some displays are on") : text ?? "");
             if (tile.Id == "always-on-top")
             {
                 int count = App.Current.AlwaysOnTop?.PinnedCount ?? 0;
                 pinnedCount.Text = UiText.Format("{0} pinned", count);
                 pinnedCount.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                AutomationProperties.SetHelpText(button, $"{tile.Subtitle}. {pinnedCount.Text}");
+                AutomationProperties.SetHelpText(button, $"{text}. {pinnedCount.Text}");
             }
         }
         Observe(tile, Update, _unsubscribe);
@@ -293,7 +292,12 @@ public sealed partial class FlyoutWindow : Window, IDisposable
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(FlyoutViewModel.Subpage)) return;
+        if (e.PropertyName == nameof(FlyoutViewModel.Subpage)) ApplyPage();
+    }
+
+    /// <summary>Shows the main grid or the open tile's page, building that page's controls.</summary>
+    private void ApplyPage()
+    {
         _utilityPage = UtilityPage.None;
         ReleaseSubpage();
         bool open = _model.Subpage is not null;
@@ -305,48 +309,19 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         Heading.Text = _model.Subpage?.Title ?? "Llampec";
         if (_model.Subpage is { } page)
         {
-            if (page.Id == "theme")
+            if (CreateSubpageView(page) is { } view)
             {
-                _scheduleView = new ThemeScheduleView(hold => _dialogOpen = hold);
-                Subpage.Children.Add(_scheduleView);
-            }
-            if (page.Action is Llampec.Actions.Caffeine.CaffeineAction caffeine)
-            {
-                _caffeineView = new CaffeineView(caffeine);
-                Subpage.Children.Add(_caffeineView);
-            }
-            if (page.Id == "always-on-top" && App.Current.AlwaysOnTop is { } alwaysOnTop)
-            {
-                _alwaysOnTopView = new AlwaysOnTopView(alwaysOnTop, hold => _dialogOpen = hold);
-                Subpage.Children.Add(_alwaysOnTopView);
-            }
-            if (page.Id == "fullscreen" && App.Current.Fullscreen is { } fullscreen)
-            {
-                _fullscreenView = new FullscreenView(fullscreen);
-                Subpage.Children.Add(_fullscreenView);
-            }
-            if (page.Id == "rotation" && App.Current.Rotation is { } rotation)
-            {
-                _rotationView = new RotationView(rotation, hold => _dialogOpen = hold);
-                Subpage.Children.Add(_rotationView);
-            }
-            if (page.Action is Llampec.Actions.Power.PowerAction power)
-            {
-                _powerView = new PowerView(power);
-                Subpage.Children.Add(_powerView);
-            }
-            if (page.Id == "mouse")
-            {
-                _logitechMouseView = new LogitechMouseView(App.Current.LogitechMouse, Reposition);
-                Subpage.Children.Add(_logitechMouseView);
-            }
+                _subpageView = (IDisposable)view;
+                Subpage.Children.Add(view);
+            }            if (page.Id == "touch-keyboard")
+                Subpage.Children.Add(new TextBlock { Text = T("Taskbar icon"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
             foreach (var tile in page.SubTiles)
             {
                 bool updating = false;
                 if (tile.IsRadioItem)
                 {
                     var radio = new RadioButton { Content = tile.Title, GroupName = page.Id, MinHeight = 44 };
-                    radio.Click += (_, _) => { if (!updating) tile.ToggleCommand.Execute(null); };
+                    radio.Click += (_, _) => { if (!updating) tile.Toggle(); };
                     Subpage.Children.Add(radio);
                     Observe(tile, () =>
                     {
@@ -359,7 +334,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
                 else
                 {
                     var toggle = new ToggleSwitch { Header = tile.Title, OnContent = T("On"), OffContent = T("Off"), HorizontalAlignment = HorizontalAlignment.Stretch };
-                    toggle.Toggled += (_, _) => { if (!updating) tile.ToggleCommand.Execute(null); };
+                    toggle.Toggled += (_, _) => { if (!updating) tile.Toggle(); };
                     Subpage.Children.Add(toggle);
                     Observe(tile, () =>
                     {
@@ -373,6 +348,22 @@ public sealed partial class FlyoutWindow : Window, IDisposable
             BackButton.Focus(FocusState.Programmatic);
         }
         if (AppWindow.IsVisible) Reposition();
+    }
+
+    /// <summary>The page's own controls, or null when the generic switches suffice. Each is IDisposable.</summary>
+    private FrameworkElement? CreateSubpageView(TileViewModel page)
+    {
+        if (page.Action is Llampec.Actions.Caffeine.CaffeineAction caffeine) return new CaffeineView(caffeine);
+        if (page.Action is Llampec.Actions.Power.PowerAction power) return new PowerView(power);
+        return page.Id switch
+        {
+            "theme" => new ThemeScheduleView(Hold),
+            "always-on-top" when App.Current.AlwaysOnTop is { } pins => new AlwaysOnTopView(pins, Hold),
+            "fullscreen" when App.Current.Fullscreen is { } fullscreen => new FullscreenView(fullscreen),
+            "rotation" when App.Current.Rotation is { } rotation => new RotationView(rotation, Hold),
+            "mouse" => new LogitechMouseView(App.Current.LogitechMouse),
+            _ => null,
+        };
     }
 
     private void Reposition() => Reposition(allowHidden: false);
@@ -619,10 +610,10 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         {
             if (_panelEditor?.DragInProgress == true)
             { _panelEditor.CancelDrag(); e.Handled = true; return; }
-            if (_dialogOpen) return;
+            if (IsHeld) return;
             HidePanel(); e.Handled = true; return;
         }
-        if (_dialogOpen) return;
+        if (IsHeld) return;
         if (_utilityPage != UtilityPage.None || _model.IsSubpageOpen) GoBack(); else HidePanel();
         e.Handled = true;
     }
@@ -648,10 +639,17 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         int count = App.Current.AlwaysOnTop?.PinnedCount ?? 0;
         bool added = count > _observedPinCount;
         _observedPinCount = count;
-        // HWND_TOPMOST raises a newly pinned target even with NOACTIVATE. Keep the
-        // active panel usable if that target covers it; never raise a background panel.
-        if (added && !_disposed && !_closing && AppWindow.IsVisible && User32.GetForegroundWindow() == _hwnd)
-            User32.SetWindowPos(_hwnd, -1, 0, 0, 0, 0,
+        if (added && !_disposed) KeepAboveNewTopmost();
+    }
+
+    /// <summary>
+    /// HWND_TOPMOST raises a newly pinned or fullscreen target even with NOACTIVATE. Keep the
+    /// active panel usable if that target covers it; never raise a background panel.
+    /// </summary>
+    private void KeepAboveNewTopmost()
+    {
+        if (!_closing && AppWindow.IsVisible && User32.GetForegroundWindow() == _hwnd)
+            User32.SetWindowPos(_hwnd, -1 /* HWND_TOPMOST */, 0, 0, 0, 0,
                 User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | 0x0200 /* NOOWNERZORDER */);
     }
 
@@ -669,10 +667,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         bool active = App.Current.Fullscreen?.IsActive == true;
         bool entered = active && !_observedFullscreenActive;
         _observedFullscreenActive = active;
-        // Keep an already active settings panel usable while its target expands.
-        if (entered && !_closing && AppWindow.IsVisible && User32.GetForegroundWindow() == _hwnd)
-            User32.SetWindowPos(_hwnd, -1, 0, 0, 0, 0,
-                User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | 0x0200 /* NOOWNERZORDER */);
+        if (entered) KeepAboveNewTopmost();
         if (!_closing && AppWindow.IsVisible) Reposition();
     }
 
@@ -706,14 +701,8 @@ public sealed partial class FlyoutWindow : Window, IDisposable
         _motion.Dispose();
         _idleTimer.Stop();
         _idleTimer.Tick -= OnIdle;
-        _scheduleView?.Dispose();
-        _caffeineView?.Dispose();
-        _alwaysOnTopView?.Dispose();
-        _fullscreenView?.Dispose();
-        _rotationView?.Dispose();
-        _powerView?.Dispose();
-        _logitechMouseView?.Dispose();
-        foreach (var unsubscribe in _unsubscribe.Concat(_subUnsubscribe)) unsubscribe();
+        ReleaseSubpage();
+        foreach (var unsubscribe in _unsubscribe) unsubscribe();
         _model.PropertyChanged -= OnModelChanged;
         _model.RunWithPanelHiddenRequested -= RunWithPanelHiddenAsync;
         Root.ActualThemeChanged -= OnActualThemeChanged;

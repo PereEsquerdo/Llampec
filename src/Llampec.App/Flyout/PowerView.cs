@@ -24,13 +24,14 @@ public sealed class PowerView : StackPanel, IDisposable
     private readonly TextBlock _message = Note("");
     private bool _updating;
     private bool _disposed;
+    private bool _updateQueued;
 
     public PowerView(PowerAction action)
     {
         _action = action;
         Spacing = 12;
         var modes = new StackPanel();
-        modes.Children.Add(Section("Power mode"));
+        modes.Children.Add(Section("Power mode", 4));
         modes.Children.Add(_modeScope);
         foreach (var mode in Modes)
         {
@@ -48,7 +49,7 @@ public sealed class PowerView : StackPanel, IDisposable
         Children.Add(_plan);
         Children.Add(_buttons);
         var energySaver = new StackPanel { Spacing = 4 };
-        energySaver.Children.Add(Section("Energy saver"));
+        energySaver.Children.Add(Section("Energy saver", 4));
         energySaver.Children.Add(_energySaver);
         var saverSettings = new HyperlinkButton { Content = T("Energy saver settings"), Padding = new Thickness(0) };
         saverSettings.Click += (_, _) => OpenSettings("ms-settings:batterysaver");
@@ -61,19 +62,13 @@ public sealed class PowerView : StackPanel, IDisposable
         AutomationProperties.SetLiveSetting(_message, AutomationLiveSetting.Polite);
         Children.Add(_message);
         SetMessage(null);
-        _action.Changed += OnChanged;
         _action.Refresh();
+        _action.Changed += OnChanged;
         Update();
     }
 
-    private static string T(string key) => UiText.Get(key);
 
-    private static TextBlock Note(string key) => new() { Text = T(key), FontSize = 12, TextWrapping = TextWrapping.Wrap };
 
-    private static TextBlock Section(string key) => new()
-    {
-        Text = T(key), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 4, 0, 0),
-    };
 
     private void Apply(Action change)
     {
@@ -94,7 +89,10 @@ public sealed class PowerView : StackPanel, IDisposable
 
     private void OnChanged(object? sender, EventArgs e)
     {
-        if (DispatcherQueue.HasThreadAccess) Update(); else DispatcherQueue.TryEnqueue(Update);
+        // One refresh raises a change per property; read the details and rebuild once.
+        if (_updateQueued) return;
+        _updateQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() => { _updateQueued = false; Update(); })) _updateQueued = false;
     }
 
     private void Update()
@@ -132,7 +130,7 @@ public sealed class PowerView : StackPanel, IDisposable
             _plan.Visibility = details.Plans.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
 
             _buttons.Children.Clear();
-            if (details.Lid is not null || details.PowerButton is not null) _buttons.Children.Add(Section("Lid and power button"));
+            if (details.Lid is not null || details.PowerButton is not null) _buttons.Children.Add(Section("Lid and power button", 4));
             if (details.Lid is { } lid) AddButton("When I close the lid", lid, power.HasBattery);
             if (details.PowerButton is { } button) AddButton("When I press the power button", button, power.HasBattery);
             _buttons.Visibility = _buttons.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -217,7 +215,7 @@ public sealed class PowerView : StackPanel, IDisposable
             return;
         }
         _battery.Visibility = Visibility.Visible;
-        _battery.Children.Add(Section("Battery"));
+        _battery.Children.Add(Section("Battery", 4));
         string charge = health.Percent is int percent ? UiText.Format("{0}%", percent) : "";
         if (health.RateWatts is double watts)
             charge = UiText.Format(health.Charging ? "{0} · charging at {1} W" : "{0} · discharging at {1} W",
@@ -230,18 +228,10 @@ public sealed class PowerView : StackPanel, IDisposable
 
     private async void OpenSettings(string uri)
     {
-        try
-        {
-            if (!await Windows.System.Launcher.LaunchUriAsync(new Uri(uri))) throw new InvalidOperationException();
-        }
-        catch { if (!_disposed) SetMessage("Could not open Windows Settings."); }
+        if (!await OpenSettingsAsync(uri) && !_disposed) SetMessage("Could not open Windows Settings.");
     }
 
-    private void SetMessage(string? key)
-    {
-        _message.Text = key is null ? "" : T(key);
-        _message.Visibility = key is null ? Visibility.Collapsed : Visibility.Visible;
-    }
+    private void SetMessage(string? key) => PanelControls.SetMessage(_message, key);
 
     public void Dispose()
     {

@@ -57,7 +57,8 @@ public static class AdministratorRestart
         try
         {
             using var previous = Process.GetProcessById(id);
-            if (!string.Equals(previous.MainModule?.FileName, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
+            // A module snapshot can fail while the old instance is exiting; the image path still reads.
+            if (!string.Equals(ProcessImage.ImagePath((uint)id), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
                 return false;
             // Cancelling an in-flight HID change can require its bounded rollback
             // followed by durable mouse restoration. Allow both cleanup budgets

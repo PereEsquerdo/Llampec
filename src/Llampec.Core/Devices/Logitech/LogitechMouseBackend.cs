@@ -51,6 +51,8 @@ internal interface ILogitechMouseSession : IAsyncDisposable
     LogitechBattery? Battery => null;
     /// <summary>Raised on the HID reader task; handlers must queue work and return promptly.</summary>
     event Action? BatteryChanged { add { } remove { } }
+    /// <summary>The device reconnected while its HID path stayed open; same threading as <see cref="BatteryChanged"/>.</summary>
+    event Action? Reconnected { add { } remove { } }
 }
 
 internal sealed class WindowsLogitechMouseBackend : ILogitechMouseBackend
@@ -76,7 +78,8 @@ internal sealed class WindowsLogitechMouseBackend : ILogitechMouseBackend
                     if (device.Dpi is not null || device.VerticalWheelMode.HasValue || device.HorizontalWheelState is not null
                         || device.Controls.Any(control => control.Divertable))
                         result.Add(device);
-                    if (slot == 0xFF && result.Any(d => string.Equals(d.Path, info.Path, StringComparison.OrdinalIgnoreCase))) break;
+                    // Only a directly connected device answers HID++ 2.0 at 0xFF; it has no receiver slots.
+                    if (slot == 0xFF) break;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (Exception ex) when (ex is IOException or InvalidDataException or TimeoutException or System.ComponentModel.Win32Exception)
@@ -154,6 +157,11 @@ internal sealed class WindowsLogitechMouseBackend : ILogitechMouseBackend
         {
             add => _device.BatteryChanged += value;
             remove => _device.BatteryChanged -= value;
+        }
+        public event Action? Reconnected
+        {
+            add => _device.Reconnected += value;
+            remove => _device.Reconnected -= value;
         }
         public async ValueTask DisposeAsync()
         {

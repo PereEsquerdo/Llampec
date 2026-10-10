@@ -861,7 +861,7 @@ public sealed class PanelLayoutEditor : Grid, IDisposable
 
     private static TransitionCollection Reflow() => [new RepositionThemeTransition { IsStaggeringEnabled = false }];
     private Style EditorStyle(string key) => (Style)_styles[key];
-    private static string T(string key) => UiText.Get(key);
+
     private static string ErrorText(ArgumentException exception)
     {
         // ArgumentException appends its parameter name to Message; translate the

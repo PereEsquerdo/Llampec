@@ -27,22 +27,13 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
     };
     private readonly TextBlock _empty = Note("No windows available.");
     private readonly Button _unpinAll = new() { Content = UiText.Get("Unpin all") };
-    private readonly ToggleSwitch _border = new()
-    {
-        Header = UiText.Get("Show border"), OnContent = UiText.Get("On"), OffContent = UiText.Get("Off"),
-    };
-    private readonly NumberBox _thickness = new()
-    {
-        Header = UiText.Get("Border thickness"), Minimum = AlwaysOnTopSettings.MinimumBorderThickness,
-        Maximum = AlwaysOnTopSettings.MaximumBorderThickness, SmallChange = 1, LargeChange = 1,
-        SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-        HorizontalAlignment = HorizontalAlignment.Stretch,
-    };
+    private readonly AppearanceEditor _appearance;
     private readonly TextBlock _appearanceError = Note("");
-    private readonly TextBox _shortcut = new() { PlaceholderText = "Ctrl+Alt+T" };
-    private readonly TextBlock _shortcutStatus = Note("");
+    private readonly StackPanel _perWindow = new() { Spacing = 8 };
+    private readonly TextBlock _perWindowEmpty = Note("Pin a window to adjust it separately.");
+    private readonly Dictionary<nint, WindowAppearanceRow> _appearanceRows = [];
+
     private readonly DispatcherQueueTimer _refreshTimer;
-    private bool _updatingAppearance;
     private bool _disposed;
     private string? _restartError;
 
@@ -54,7 +45,6 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(150);
         _refreshTimer.IsRepeating = false;
         _refreshTimer.Tick += OnRefreshTick;
-
         Children.Add(Section("Choose a window"));
         Children.Add(_count);
         var windowScroll = new ScrollViewer
@@ -97,59 +87,30 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
         Children.Add(buttons);
 
         Children.Add(Section("Appearance", topMargin: 6));
-        var preferences = App.Current.Settings.AlwaysOnTop ?? new();
-        _border.IsOn = preferences.ShowBorder;
-        _thickness.Value = preferences.BorderThickness;
-        _thickness.IsEnabled = _border.IsOn;
-        AutomationProperties.SetName(_border, UiText.Get("Show border"));
-        AutomationProperties.SetName(_thickness, UiText.Get("Border thickness"));
-        AutomationProperties.SetHelpText(_thickness, UiText.Get("Enter a whole number from 1 to 8."));
-        _border.Toggled += (_, _) => SaveAppearance(borderChanged: true);
-        _thickness.ValueChanged += (_, _) => SaveAppearance(borderChanged: false);
-        Children.Add(_border);
-        Children.Add(_thickness);
+        var preferences = App.Current.Settings.AlwaysOnTop;
+        _appearance = new AppearanceEditor(DispatcherQueue);
+        _appearance.Show(preferences.Appearance);
+        _appearance.Changed += (_, _) => SaveAppearance();
+        Children.Add(_appearance);
         Children.Add(_appearanceError);
-
-        Children.Add(Section("Shortcut", topMargin: 6));
-        _shortcut.Text = preferences.Hotkey;
-        AutomationProperties.SetName(_shortcut, UiText.Get("Shortcut"));
-        _shortcut.KeyDown += (_, e) =>
+        // Rarely needed, so it stays folded below the global appearance.
+        _perWindow.Children.Add(_perWindowEmpty);
+        var perWindow = new Expander
         {
-            if (e.Key != Windows.System.VirtualKey.Enter) return;
-            ApplyShortcut();
-            e.Handled = true;
+            Header = UiText.Get("Per-window appearance"), Content = _perWindow,
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
-        Children.Add(_shortcut);
-        Children.Add(Note("Pins or unpins the active window. Leave empty to disable."));
-        var apply = new Button { Content = UiText.Get("Apply"), HorizontalAlignment = HorizontalAlignment.Stretch };
-        apply.Click += (_, _) => ApplyShortcut();
-        Children.Add(apply);
-        Children.Add(_shortcutStatus);
+        AutomationProperties.SetName(perWindow, UiText.Get("Per-window appearance"));
+        Children.Add(perWindow);
+        Children.Add(new ShortcutEditor(AlwaysOnTopSettings.DefaultHotkey,
+            "Pins or unpins the active window. Leave empty to disable.",
+            () => App.Current.Settings.AlwaysOnTop.Hotkey, App.Current.TrySetAlwaysOnTopHotkey, App.Current.AlwaysOnTopHotkeyError));
         SetMessage(_appearanceError, null);
-        SetMessage(_shortcutStatus, App.Current.AlwaysOnTopHotkeyError);
         AutomationProperties.SetLiveSetting(_windowError, AutomationLiveSetting.Polite);
         AutomationProperties.SetLiveSetting(_appearanceError, AutomationLiveSetting.Polite);
-        AutomationProperties.SetLiveSetting(_shortcutStatus, AutomationLiveSetting.Polite);
 
         _service.Changed += OnChanged;
         RefreshWindows();
-    }
-
-    private static TextBlock Note(string key) => new()
-    {
-        Text = UiText.Get(key), FontSize = 12, TextWrapping = TextWrapping.Wrap,
-    };
-
-    private static TextBlock Section(string key, double topMargin = 0) => new()
-    {
-        Text = UiText.Get(key), FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-        Margin = new Thickness(0, topMargin, 0, 0),
-    };
-
-    private static void SetMessage(TextBlock control, string? key)
-    {
-        control.Text = key is null ? "" : UiText.Get(key);
-        control.Visibility = string.IsNullOrEmpty(key) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void RefreshWindows()
@@ -163,8 +124,7 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
 
     private void OnChanged(object? sender, EventArgs e)
     {
-        if (DispatcherQueue.HasThreadAccess) ScheduleRefresh();
-        else DispatcherQueue.TryEnqueue(ScheduleRefresh);
+        OnUi(DispatcherQueue, ScheduleRefresh);
     }
 
     private void ScheduleRefresh()
@@ -180,8 +140,9 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
     private void UpdateWindows()
     {
         if (_disposed) return;
-        var available = _service.GetWindows().OrderByDescending(window => window.IsPinned)
-            .ThenBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        _refreshTimer.Stop();
+        // Pinned windows first, then by title, as the service orders them.
+        var available = _service.GetWindows();
         var present = available.Select(window => window.Handle).ToHashSet();
         foreach (var handle in _rows.Keys.Where(handle => !present.Contains(handle)).ToArray())
         {
@@ -189,7 +150,7 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
             _rows.Remove(handle);
         }
 
-        for (int index = 0; index < available.Length; index++)
+        for (int index = 0; index < available.Count; index++)
         {
             var window = available[index];
             if (!_rows.TryGetValue(window.Handle, out var row))
@@ -205,93 +166,158 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
             string operation = UiText.Format(window.IsPinned ? "Unpin: {0}" : "Pin: {0}", window.Title);
             AutomationProperties.SetName(row.Button, operation);
             ToolTipService.SetToolTip(row.Button, operation);
-            int oldIndex = _windows.Children.IndexOf(row.Button);
-            if (oldIndex == index) continue;
-            var focus = row.Button.FocusState;
-            if (oldIndex >= 0) _windows.Children.RemoveAt(oldIndex);
-            _windows.Children.Insert(index, row.Button);
-            if (focus != FocusState.Unfocused) row.Button.Focus(focus);
+            Place(_windows, row.Button, index);
         }
 
         _count.Text = UiText.Format("{0} pinned", _service.PinnedCount);
         _unpinAll.IsEnabled = _service.PinnedCount > 0;
-        _empty.Visibility = available.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _empty.Visibility = available.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_service.Error != AdministratorRestart.PermissionError) _restartError = null;
         SetMessage(_windowError, _restartError ?? _service.Error);
         _restartAdministrator.Visibility = _service.Error == AdministratorRestart.PermissionError
             && !AdministratorRestart.IsAdministrator ? Visibility.Visible : Visibility.Collapsed;
+        UpdateAppearanceRows();
     }
 
-    private void SaveAppearance(bool borderChanged)
+    /// <summary>Moves a retained control only when its position changed, keeping focus and any drag.</summary>
+    private static void Place(Panel panel, Control control, int index)
     {
-        if (_disposed || _updatingAppearance) return;
-        _thickness.IsEnabled = _border.IsOn;
+        int oldIndex = panel.Children.IndexOf(control);
+        if (oldIndex == index) return;
+        var focus = control.FocusState;
+        if (oldIndex >= 0) panel.Children.RemoveAt(oldIndex);
+        panel.Children.Insert(index, control);
+        if (focus != FocusState.Unfocused) control.Focus(focus);
+    }
+
+    private void SaveAppearance()
+    {
+        if (_disposed) return;
         var settings = App.Current.Settings;
         var previous = settings.AlwaysOnTop;
-        double thickness = _thickness.Value;
-        if (!double.IsFinite(thickness) || thickness != Math.Truncate(thickness)
-            || thickness is < AlwaysOnTopSettings.MinimumBorderThickness or > AlwaysOnTopSettings.MaximumBorderThickness)
+        var value = _appearance.Value;
+        settings.AlwaysOnTop = new AlwaysOnTopSettings
         {
-            if (!borderChanged)
-            {
-                SetMessage(_appearanceError, "Enter a whole number from 1 to 8.");
-                return;
-            }
-            // A cleared number field must not prevent switching the border off.
-            thickness = previous?.BorderThickness ?? AlwaysOnTopSettings.DefaultBorderThickness;
-            _updatingAppearance = true;
-            try { _thickness.Value = thickness; }
-            finally { _updatingAppearance = false; }
-        }
-
-        var next = new AlwaysOnTopSettings
-        {
-            ShowBorder = _border.IsOn, BorderThickness = (int)thickness,
-            Hotkey = previous?.Hotkey ?? AlwaysOnTopSettings.DefaultHotkey,
+            ShowBorder = value.ShowBorder, BorderThickness = value.BorderThickness,
+            BorderColor = value.BorderColor is { } rgb ? AlwaysOnTopSettings.FormatColor(rgb) : null,
+            Opacity = value.Opacity, Hotkey = previous.Hotkey,
         };
-        settings.AlwaysOnTop = next;
         if (!SettingsStore.Save(settings))
         {
-            settings.AlwaysOnTop = previous!;
-            _updatingAppearance = true;
-            try
-            {
-                _border.IsOn = previous?.ShowBorder ?? true;
-                _thickness.Value = previous?.BorderThickness ?? AlwaysOnTopSettings.DefaultBorderThickness;
-                _thickness.IsEnabled = _border.IsOn;
-            }
-            finally { _updatingAppearance = false; }
+            settings.AlwaysOnTop = previous;
+            _appearance.Show(previous.Appearance);
             SetMessage(_appearanceError, "Could not save settings.");
             return;
         }
         SetMessage(_appearanceError, null);
+        // An appearance error reaches the view through the service's Changed event.
         _service.ApplyAppearance();
-        UpdateWindows();
     }
 
-    private void ApplyShortcut()
+    /// <summary>One entry per pinned window, retained while the window stays pinned.</summary>
+    private void UpdateAppearanceRows()
     {
-        string text = _shortcut.Text.Trim();
-        if (text.Length != 0 && !Hotkey.TryParse(text, out _))
+        var pinned = _service.GetPinnedAppearances();
+        var present = pinned.Select(window => window.Handle).ToHashSet();
+        foreach (var handle in _appearanceRows.Keys.Where(handle => !present.Contains(handle)).ToArray())
         {
-            SetMessage(_shortcutStatus, "Enter a valid shortcut or leave it empty to disable it.");
+            _perWindow.Children.Remove(_appearanceRows[handle].Expander);
+            _appearanceRows[handle].Editor.Detach();
+            _appearanceRows.Remove(handle);
+        }
+        if (pinned.Count == 0)
+        {
+            if (!_perWindow.Children.Contains(_perWindowEmpty)) _perWindow.Children.Add(_perWindowEmpty);
             return;
         }
-        if (!App.Current.TrySetAlwaysOnTopHotkey(text, out string? error))
+        _perWindow.Children.Remove(_perWindowEmpty);
+        for (int index = 0; index < pinned.Count; index++)
         {
-            SetMessage(_shortcutStatus, error ?? "Could not save settings.");
-            return;
+            var window = pinned[index];
+            if (!_appearanceRows.TryGetValue(window.Handle, out var row))
+            {
+                row = new WindowAppearanceRow(DispatcherQueue);
+                nint handle = window.Handle;
+                row.UseGlobal.Toggled += (_, _) =>
+                {
+                    if (row.Updating) return;
+                    if (!row.UseGlobal.IsOn) row.Editor.Show(App.Current.Settings.AlwaysOnTop.Appearance);
+                    row.UpdateVisibility();
+                    _service.SetWindowAppearance(handle, row.UseGlobal.IsOn ? null : row.Editor.Value);
+                };
+                row.Editor.Changed += (_, _) =>
+                {
+                    if (!_disposed && !row.UseGlobal.IsOn) _service.SetWindowAppearance(handle, row.Editor.Value);
+                };
+                _appearanceRows.Add(handle, row);
+                row.Show(window.Appearance);
+            }
+            // A window unpinned and pinned again starts from the global appearance.
+            else if (window.Appearance is null != row.UseGlobal.IsOn) row.Show(window.Appearance);
+            row.SetTitle(window.Title);
+            Place(_perWindow, row.Expander, index);
         }
-        _shortcut.Text = App.Current.Settings.AlwaysOnTop.Hotkey;
-        SetMessage(_shortcutStatus, text.Length == 0 ? "Shortcut disabled." : "Shortcut saved.");
     }
-
     public void Dispose()
     {
+        // Closing the panel mid-drag still applies the last choice.
+        if (!_disposed)
+        {
+            _appearance.Flush();
+            foreach (var row in _appearanceRows.Values) row.Editor.Flush();
+        }
         _disposed = true;
         _service.Changed -= OnChanged;
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
+        _appearance.Detach();
+        foreach (var row in _appearanceRows.Values) row.Editor.Detach();
+    }
+
+    /// <summary>A pinned window's folded entry: follow the global appearance, or use its own.</summary>
+    private sealed class WindowAppearanceRow
+    {
+        private readonly TextBlock _title = new() { TextTrimming = TextTrimming.CharacterEllipsis };
+
+        public WindowAppearanceRow(DispatcherQueue dispatcher)
+        {
+            Editor = new AppearanceEditor(dispatcher);
+            var content = new StackPanel { Spacing = 10 };
+            content.Children.Add(UseGlobal);
+            content.Children.Add(Editor);
+            Expander = new Expander
+            {
+                Header = _title, Content = content,
+                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            };
+            AutomationProperties.SetName(UseGlobal, UiText.Get("Use global appearance"));
+        }
+
+        public Expander Expander { get; }
+        public AppearanceEditor Editor { get; }
+        public ToggleSwitch UseGlobal { get; } = new()
+        {
+            Header = UiText.Get("Use global appearance"), OnContent = UiText.Get("On"), OffContent = UiText.Get("Off"),
+        };
+        public bool Updating { get; private set; }
+
+        /// <summary>Shows the window's own appearance, or the global one it follows, without reporting it.</summary>
+        public void Show(WindowAppearance? own)
+        {
+            Editor.Show(own ?? App.Current.Settings.AlwaysOnTop.Appearance);
+            Updating = true;
+            UseGlobal.IsOn = own is null;
+            Updating = false;
+            UpdateVisibility();
+        }
+
+        public void SetTitle(string title)
+        {
+            _title.Text = title;
+            AutomationProperties.SetName(Expander, title);
+        }
+
+        public void UpdateVisibility() => Editor.Visibility = UseGlobal.IsOn ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private sealed class WindowRow

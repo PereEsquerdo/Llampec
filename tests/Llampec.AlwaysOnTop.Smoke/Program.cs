@@ -109,6 +109,21 @@ internal static class Program
         service.ApplyAppearance();
         ValidateBorder(first.Handle, border, 1);
 
+        Check(!IsLayered(first.Handle) && !IsLayered(second.Handle), "Full opacity leaves pinned windows unlayered");
+        preferences.Opacity = 50;
+        service.ApplyAppearance();
+        Check(Alpha(first.Handle) == 128 && Alpha(second.Handle) == 128, "Global opacity makes both pinned windows 50 % opaque");
+        service.SetWindowAppearance(second.Handle, new WindowAppearance(true, 1, 0x00FF80, 80));
+        Check(Alpha(first.Handle) == 128 && Alpha(second.Handle) == 204, "A window's own opacity overrides the global value");
+        service.SetWindowAppearance(second.Handle, null);
+        Check(Alpha(second.Handle) == 128, "Clearing a window's appearance returns to the global opacity");
+        preferences.Opacity = 100;
+        service.ApplyAppearance();
+        Check(!IsLayered(first.Handle) && !IsLayered(second.Handle), "Full opacity restores the original unlayered style");
+        preferences.Opacity = 60;
+        service.ApplyAppearance();
+        Check(Alpha(first.Handle) == 153, "Opacity can be applied again after a restoration");
+
         first.VerifyOwned();
         Check(Native.SetWindowPos(first.Handle, 0, 130, 190, 480, 290, NoActivate | NoZOrder),
             "Synthetic target moves and resizes");
@@ -137,14 +152,17 @@ internal static class Program
         Check(Native.GetForegroundWindow() == foreground, "Unpin does not change the foreground window");
         Check(service.PinnedCount == 0 && !IsTopmost(first.Handle) && FindBorder(first.Handle) == 0,
             "Unpin restores original z-order status and removes border");
+        Check(!IsLayered(first.Handle), "Unpin restores the original opacity");
 
         first.VerifyOwned();
         service.GetWindows();
         service.Toggle(first.Handle);
-        Check(service.PinnedCount == 1 && IsTopmost(first.Handle), "Window can be pinned again");
+        Check(service.PinnedCount == 1 && IsTopmost(first.Handle) && Alpha(first.Handle) == 153,
+            "Window can be pinned again and takes the global opacity");
         service.Dispose();
         Check(service.PinnedCount == 0 && !IsTopmost(first.Handle) && FindBorder(first.Handle) == 0,
             "Normal disposal restores owned topmost state and destroys borders");
+        Check(!IsLayered(first.Handle), "Normal disposal restores the original opacity");
     }
 
     private static void ValidateOwnedDialogResolution(Host host)
@@ -282,6 +300,9 @@ internal static class Program
     }
 
     private static bool IsTopmost(nint handle) => (Native.GetWindowLongPtr(handle, ExStyle).ToInt64() & 8) != 0;
+    private static bool IsLayered(nint handle) => (Native.GetWindowLongPtr(handle, ExStyle).ToInt64() & 0x80000) != 0;
+    /// <summary>The layered alpha, or -1 while the window is not layered.</summary>
+    private static int Alpha(nint handle) => IsLayered(handle) && Native.GetLayeredWindowAttributes(handle, out _, out byte alpha, out _) ? alpha : -1;
 
     private static nint FindBorder(nint owner)
     {
@@ -447,6 +468,7 @@ internal static class Program
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool PostMessage(nint window, uint message, nuint wParam, nint lParam);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern nint SendMessage(nint window, uint message, nuint wParam, nint lParam);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern nint GetWindowLongPtr(nint window, int index);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool GetLayeredWindowAttributes(nint window, out uint colorKey, out byte alpha, out uint flags);
         [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
         [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProcedure callback, nint data);
         [DllImport("user32.dll")] public static extern nint GetWindow(nint window, uint command);

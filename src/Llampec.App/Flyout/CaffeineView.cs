@@ -66,14 +66,14 @@ public sealed class CaffeineView : StackPanel, IDisposable
 
     private void OnChanged(object? sender, EventArgs e)
     {
-        if (DispatcherQueue.HasThreadAccess) Update(); else DispatcherQueue.TryEnqueue(Update);
+        OnUi(DispatcherQueue, Update);
     }
 
     private void Update()
     {
         if (_disposed) return;
         bool active = _action.State == ActionState.On;
-        _status.Text = _action.StatusText;
+        _status.Text = UiText.Get(_action.Subtitle ?? "");
         _apply.Content = UiText.Get(active ? "Apply and restart" : "Activate");
         _stop.IsEnabled = active;
     }

@@ -12,7 +12,8 @@ public sealed class AlwaysOnTopTests
     {
         public int Thickness;
         public bool Disposed;
-        public void Update(int thickness) => Thickness = thickness;
+        public uint? Color;
+        public void Update(int thickness, uint? color) { Thickness = thickness; Color = color; }
         public void Dispose() => Disposed = true;
     }
 
@@ -59,11 +60,28 @@ public sealed class AlwaysOnTopTests
             if (NotifyDuringMutation) Notify(identity.Handle);
             return !failed;
         }
+        /// <summary>Current alpha per window; absent means opaque and untouched.</summary>
+        public Dictionary<nint, byte> Alpha = [];
+        public bool FailOpacity, FailRestore;
+        public bool TrySetOpacity(WindowIdentity identity, byte alpha, ref OpacityRestore? original)
+        {
+            if (!HasClaim(identity)) throw new Xunit.Sdk.XunitException("Opacity without a valid claim.");
+            if (FailOpacity) { LastError = "This window does not support transparency."; return false; }
+            original ??= new(false, 0, 255, 0);
+            Alpha[identity.Handle] = alpha;
+            return true;
+        }
+        public bool TryRestoreOpacity(WindowIdentity identity, OpacityRestore original)
+        {
+            if (FailRestore) { LastError = "The window is not responding. Try again when it responds."; return false; }
+            Alpha.Remove(identity.Handle);
+            return true;
+        }
         public void Foreground(nint handle) { ForegroundWindow = handle; WindowChanged?.Invoke(new(handle, true)); }
         public void Notify(nint handle) => WindowChanged?.Invoke(new(handle, false));
         public void Move(nint handle) => WindowChanged?.Invoke(new(handle, false, true));
         public bool Tracking;
-        public void SetWindowTracking(bool enabled) => Tracking = enabled;
+        public void SetWindowTracking(bool all, IReadOnlyCollection<WindowIdentity> pinned) => Tracking = all || pinned.Count != 0;
         public void Dispose() => Disposed = true;
     }
 
@@ -459,6 +477,142 @@ public sealed class AlwaysOnTopTests
         service.ApplyAppearance();
         Assert.Equal(2, borders.Count);
         Assert.Equal(6, borders[1].Thickness);
+        Assert.Null(borders[1].Color);
+        preferences.BorderColor = "#00FF80";
+        service.ApplyAppearance();
+        Assert.Equal(0x00FF80u, borders[1].Color);
+        preferences.BorderColor = null;
+        service.ApplyAppearance();
+        Assert.Null(borders[1].Color);
+    }
+
+    [Fact]
+    public void GlobalOpacityAppliesLiveAndIsRestoredOnUnpinAndShutdown()
+    {
+        var windows = new Windows();
+        var preferences = new AlwaysOnTopSettings();
+        var service = Create(windows, preferences);
+        service.ToggleTarget();
+        Assert.Empty(windows.Alpha); // 100 % leaves the window untouched
+        preferences.Opacity = 50;
+        service.ApplyAppearance();
+        Assert.Equal(128, windows.Alpha[1]);
+        preferences.Opacity = 100;
+        service.ApplyAppearance();
+        Assert.Empty(windows.Alpha);
+        preferences.Opacity = 80;
+        service.ApplyAppearance();
+        service.ToggleTarget(); // unpin
+        Assert.Empty(windows.Alpha);
+        service.ToggleTarget();
+        Assert.Equal(204, windows.Alpha[1]);
+        service.Dispose();
+        Assert.Empty(windows.Alpha);
+    }
+
+    [Fact]
+    public void UnpinKeepsThePinWhileOpacityCannotBeRestored()
+    {
+        var windows = new Windows();
+        using var service = Create(windows, new AlwaysOnTopSettings { Opacity = 50 });
+        service.ToggleTarget();
+        windows.FailRestore = true; // e.g. the window stopped responding
+        service.ToggleTarget();
+        Assert.True(service.IsTargetPinned);
+        Assert.True(windows.Items[1].IsTopmost);
+        Assert.Equal("The window is not responding. Try again when it responds.", service.Error);
+        windows.FailRestore = false;
+        service.ToggleTarget();
+        Assert.False(service.IsTargetPinned);
+        Assert.Empty(windows.Alpha);
+    }
+
+    [Fact]
+    public void ExternallyUnpinnedWindowIsMadeOpaqueAgain()
+    {
+        var windows = new Windows();
+        using var service = Create(windows, new AlwaysOnTopSettings { Opacity = 60 });
+        service.ToggleTarget();
+        Assert.True(windows.Alpha.ContainsKey(1));
+        windows.Items[1] = windows.Items[1] with { IsTopmost = false };
+        windows.Notify(1);
+        Assert.Equal(0, service.PinnedCount);
+        Assert.Empty(windows.Alpha);
+    }
+
+    [Fact]
+    public void WindowAppearanceOverridesGlobalUntilCleared()
+    {
+        var windows = new Windows();
+        var preferences = new AlwaysOnTopSettings { BorderThickness = 3, Opacity = 90 };
+        var borders = new List<Border>();
+        using var service = Create(windows, preferences, borders);
+        service.ToggleTarget();
+        windows.Foreground(2);
+        service.ToggleTarget();
+        Assert.Equal(2, service.PinnedCount);
+        Assert.All(service.GetPinnedAppearances(), window => Assert.Null(window.Appearance));
+
+        service.SetWindowAppearance(2, new WindowAppearance(true, 7, 0x00FF80, 40));
+        var bravo = Assert.Single(service.GetPinnedAppearances(), window => window.Handle == 2);
+        Assert.Equal(7, bravo.Appearance!.BorderThickness);
+        Assert.Equal(102, windows.Alpha[2]);
+        Assert.Equal(230, windows.Alpha[1]);
+        Assert.Equal(7, borders[1].Thickness);
+        Assert.Equal(0x00FF80u, borders[1].Color);
+        Assert.Equal(3, borders[0].Thickness);
+
+        // Global changes leave the window with its own appearance alone.
+        preferences.Opacity = 100;
+        service.ApplyAppearance();
+        Assert.False(windows.Alpha.ContainsKey(1));
+        Assert.Equal(102, windows.Alpha[2]);
+
+        service.SetWindowAppearance(2, new WindowAppearance(false, 7, null, 100));
+        Assert.True(borders[1].Disposed);
+        Assert.False(windows.Alpha.ContainsKey(2));
+
+        service.SetWindowAppearance(2, null);
+        Assert.Null(Assert.Single(service.GetPinnedAppearances(), window => window.Handle == 2).Appearance);
+        Assert.Equal(3, borders[^1].Thickness);
+    }
+
+    [Fact]
+    public void UnsupportedTransparencyKeepsThePinAndReportsIt()
+    {
+        var windows = new Windows { FailOpacity = true };
+        var borders = new List<Border>();
+        using var service = Create(windows, new AlwaysOnTopSettings { Opacity = 50 }, borders);
+        service.ToggleTarget();
+        Assert.True(service.IsTargetPinned);
+        Assert.Single(borders);
+        Assert.Equal("This window does not support transparency.", service.Error);
+        windows.FailOpacity = false;
+        service.ApplyAppearance();
+        Assert.Null(service.Error);
+        Assert.Equal(128, windows.Alpha[1]);
+    }
+
+    [Theory]
+    [InlineData(0, 30)]
+    [InlineData(55, 55)]
+    [InlineData(500, 100)]
+    public void StoredOpacityIsNormalized(int value, int expected)
+        => Assert.Equal(expected, new AlwaysOnTopSettings { Opacity = value }.Opacity);
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("blue", null)]
+    [InlineData("#12345", null)]
+    [InlineData("#1234567", null)]
+    [InlineData("8b6f5c", "#8B6F5C")]
+    [InlineData(" #00ff80 ", "#00FF80")]
+    public void StoredBorderColorIsNormalized(string? value, string? expected)
+    {
+        var settings = new AlwaysOnTopSettings { BorderColor = value };
+        Assert.Equal(expected, settings.BorderColor);
+        Assert.Equal(expected is null, settings.BorderRgb is null);
     }
 
     [Fact]
@@ -558,15 +712,20 @@ public sealed class AlwaysOnTopTests
     [Fact]
     public void AppearanceRoundTripsAndNullFeatureSettingsUseDefaults()
     {
-        var settings = new AppSettings { AlwaysOnTop = new() { ShowBorder = false, BorderThickness = 7, Hotkey = "Win+Ctrl+T" } };
+        var settings = new AppSettings { AlwaysOnTop = new() { ShowBorder = false, BorderThickness = 7, BorderColor = "#00FF80", Hotkey = "Win+Ctrl+T" } };
         string json = JsonSerializer.Serialize(settings, SettingsJsonContext.Default.AppSettings);
         var restored = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings)!;
         Assert.False(restored.AlwaysOnTop.ShowBorder);
         Assert.Equal(7, restored.AlwaysOnTop.BorderThickness);
         Assert.Equal("Win+Ctrl+T", restored.AlwaysOnTop.Hotkey);
+        Assert.Equal("#00FF80", restored.AlwaysOnTop.BorderColor);
+        Assert.DoesNotContain("borderRgb", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"appearance\"", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(100, restored.AlwaysOnTop.Opacity);
         var nullSettings = JsonSerializer.Deserialize("{\"alwaysOnTop\":null}", SettingsJsonContext.Default.AppSettings)!;
         Assert.True(nullSettings.AlwaysOnTop.ShowBorder);
         Assert.Equal(3, nullSettings.AlwaysOnTop.BorderThickness);
+        Assert.Null(nullSettings.AlwaysOnTop.BorderColor);
     }
 
     [Fact]

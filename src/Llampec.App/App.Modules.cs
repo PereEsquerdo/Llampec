@@ -12,6 +12,12 @@ namespace Llampec;
 
 public partial class App
 {
+    // Global hotkey ids. A module alternates between its two ids, so a new shortcut can be
+    // reserved before the old one is released (see ConfigurableHotkey).
+    private const int OpenPanelHotkeyId = 1;
+    private const int AlwaysOnTopHotkeyIds = 2; // and 3
+    private const int FullscreenHotkeyIds = 4; // and 5
+
     private readonly Dictionary<string, IQuickAction> _actions = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _moduleSettingsGate = new(1, 1);
     private FlyoutViewModel? _model;
@@ -32,7 +38,7 @@ public partial class App
                 AlwaysOnTop.SelectionRequested += OnPinSelectionRequested;
                 AlwaysOnTop.Changed += OnPinsChanged;
                 action = _alwaysOnTopAction = new AlwaysOnTopAction(AlwaysOnTop);
-                _alwaysOnTopHotkey = CreateModuleHotkey(2, 3, Settings.AlwaysOnTop.Hotkey);
+                _alwaysOnTopHotkey = CreateModuleHotkey(AlwaysOnTopHotkeyIds, Settings.AlwaysOnTop.Hotkey);
                 break;
             case "fullscreen":
                 Fullscreen = new FullscreenService(device =>
@@ -44,7 +50,7 @@ public partial class App
                 });
                 Fullscreen.Changed += OnFullscreenStateChanged;
                 action = _fullscreenAction = new FullscreenAction(Fullscreen);
-                _fullscreenHotkey = CreateModuleHotkey(4, 5, Settings.Fullscreen.Hotkey);
+                _fullscreenHotkey = CreateModuleHotkey(FullscreenHotkeyIds, Settings.Fullscreen.Hotkey);
                 ConfigureFullscreenTimer();
                 break;
             case "rotation":
@@ -68,6 +74,8 @@ public partial class App
                 action.Changed += OnTouchTaskbarChanged;
                 break;
             case "screenshot": action = new Actions.Screenshot.ScreenshotAction(); break;
+            case "touch-keyboard": action = new Actions.Touch.TouchKeyboardAction(); break;
+            case "touchpad": action = new Actions.Touch.TouchpadAction(); break;
             case "power": action = new Actions.Power.PowerAction(); break;
             case "mouse":
                 LogitechMouse = new Devices.Logitech.LogitechMouseService(SendLogitechShortcut);
@@ -83,9 +91,9 @@ public partial class App
         _actions.Add(id, action);
     }
 
-    private ConfigurableHotkey CreateModuleHotkey(int first, int second, string text)
+    private ConfigurableHotkey CreateModuleHotkey(int firstId, string text)
     {
-        var hotkey = new ConfigurableHotkey(first, second,
+        var hotkey = new ConfigurableHotkey(firstId, firstId + 1,
             (id, parsed) => _events!.RegisterHotkey(id, parsed.Modifiers, parsed.VirtualKey),
             id => _events!.UnregisterHotkey(id));
         hotkey.Initialize(text);

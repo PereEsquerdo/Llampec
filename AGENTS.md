@@ -1,11 +1,13 @@
 # Project decisions
 
 Read [the agreed Always on Top design](docs/ALWAYS_ON_TOP.md) before working on
-that feature. Phase 1 is implemented, with fixes in 0.2.0-alpha.4; phase 2 remains planned.
+that feature. Phase 1 is implemented, with fixes in 0.2.0-alpha.4; phase 2 is in progress.
 
 The user confirmed on 2026-09-18 that phase 1 must include an Appearance section
 with a border on/off toggle and a border-thickness control. Window transparency
-and further appearance customization belong to phase 2.
+and further appearance customization belong to phase 2. On 2026-10-10 the user
+started phase 2: the border uses the real accent color or a custom one, global
+opacity, and a folded per-window appearance section for pinned windows.
 
 On 2026-10-02 the user reaffirmed Llampec's scope: simple, lightweight access
 to existing Windows settings, without deep operating-system changes. Native
@@ -37,6 +39,12 @@ because a failure only disables the control. Night light was rejected for lackin
 an API. Llampec should add what Windows lacks or does poorly, not duplicate the
 native Quick Settings. The same day added Power, MX mouse (battery only; Easy-Switch
 declined) and a minimal Camera activity button that opens Windows camera settings.
+
+On 2026-10-10 the user added Touch keyboard and Virtual touchpad buttons with
+taskbar-icon options. After testing the documented `InputPane.TryShow` (nothing
+with the keyboard attached, unreliable when detached), the user accepted a second
+undocumented exception: the shell's `ITipInvocation` for the touch keyboard. See
+[touch input](docs/TOUCH_INPUT.md).
 
 Keep the original lightweight design: no recurring work for disposable layout
 controls, no idle polling for window features and no speculative memory trimming.

@@ -8,6 +8,7 @@ public sealed partial class FlyoutWindow
     private PanelLayoutDraft? _layoutDraft;
     private PanelLayoutEditor? _panelEditor;
     private bool _savingEditor;
+    private bool _editorDragging;
 
     private void OnEdit(object sender, RoutedEventArgs args) => ShowPanelEditor();
 
@@ -44,7 +45,7 @@ public sealed partial class FlyoutWindow
 
     private void OnEditorDragStateChanged(bool dragging)
     {
-        _dialogOpen = _savingEditor || dragging;
+        _editorDragging = dragging;
         // Placement is frozen while dragging; catch up with the dropped layout.
         if (!dragging) Reposition();
     }
@@ -61,13 +62,13 @@ public sealed partial class FlyoutWindow
         EditorHeaderHost.Content = null;
         EditorHeaderHost.Visibility = EditorActions.Visibility = Visibility.Collapsed;
         NormalFooterActions.Visibility = FooterBrand.Visibility = Visibility.Visible;
-        if (!_savingEditor) _dialogOpen = false;
+        _editorDragging = false;
     }
 
     private async void OnSaveEditor(object sender, RoutedEventArgs args)
     {
         if (_layoutDraft is null || _savingEditor || _panelEditor?.DragInProgress == true) return;
-        _savingEditor = _dialogOpen = true;
+        _savingEditor = true;
         SaveEditorButton.IsEnabled = CancelEditorButton.IsEnabled = false;
         PanelScroll.IsEnabled = false;
         EditorHeaderHost.IsEnabled = false;
@@ -91,7 +92,7 @@ public sealed partial class FlyoutWindow
         }
         finally
         {
-            _savingEditor = _dialogOpen = false;
+            _savingEditor = false;
             if (!_disposed)
             {
                 SaveEditorButton.IsEnabled = CancelEditorButton.IsEnabled = true;

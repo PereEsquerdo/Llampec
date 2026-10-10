@@ -13,26 +13,20 @@ namespace Llampec.Actions.Projection;
 public sealed class ProjectionAction : QuickActionBase
 {
     private readonly List<ProjectionModeAction> _modes;
-    private bool _syncing;
+    private ProjectionTopology? _current;
 
     public ProjectionAction()
     {
+        // A mode's tap re-reads the topology for every sibling (radio-button semantics: exactly one is On).
+        ProjectionModeAction Mode(ProjectionTopology topology, string title) => new(topology, title, () => _current, Refresh);
         _modes =
         [
-            new ProjectionModeAction(ProjectionTopology.Internal, "PC screen only"),
-            new ProjectionModeAction(ProjectionTopology.Clone, "Duplicate"),
-            new ProjectionModeAction(ProjectionTopology.Extend, "Extend"),
-            new ProjectionModeAction(ProjectionTopology.External, "Second screen only"),
+            Mode(ProjectionTopology.Internal, "PC screen only"),
+            Mode(ProjectionTopology.Clone, "Duplicate"),
+            Mode(ProjectionTopology.Extend, "Extend"),
+            Mode(ProjectionTopology.External, "Second screen only"),
         ];
-
-        foreach (var mode in _modes)
-        {
-            // Any mode's tap needs every sibling re-read too (radio-button semantics: exactly one is On),
-            // not just its own tile -- QuickActionBase only re-reads the tile that was actually executed.
-            mode.Changed += (_, _) => OnModeChanged();
-        }
-
-        RefreshModes();
+        Refresh();
     }
 
     public override string Id => "projection";
@@ -42,39 +36,19 @@ public sealed class ProjectionAction : QuickActionBase
     public override IReadOnlyList<IQuickAction> SubActions => _modes;
     public override bool SubActionsAreExclusive => true;
 
-    public override void Refresh() => RefreshModes();
+    public override void Refresh()
+    {
+        _current = ProjectionModes.TryGetCurrent();
+        foreach (var mode in _modes) mode.Refresh();
+        var active = _modes.Find(m => m.State == ActionState.On);
+        IsAvailable = _current is not null;
+        State = active is not null ? ActionState.On : ActionState.Off;
+        Subtitle = _current is null ? "Not currently available" : active?.Title;
+    }
 
     protected override Task ExecuteCoreAsync(CancellationToken cancellationToken)
     {
         int index = _modes.FindIndex(m => m.State == ActionState.On);
         return _modes[(index + 1) % _modes.Count].ExecuteAsync(cancellationToken);
-    }
-
-    private void OnModeChanged()
-    {
-        if (!_syncing)
-        {
-            RefreshModes();
-        }
-    }
-
-    private void RefreshModes()
-    {
-        _syncing = true;
-        try
-        {
-            foreach (var mode in _modes)
-            {
-                mode.Refresh();
-            }
-        }
-        finally
-        {
-            _syncing = false;
-        }
-
-        var active = _modes.Find(m => m.State == ActionState.On);
-        State = active is not null ? ActionState.On : ActionState.Off;
-        Subtitle = active?.Title;
     }
 }

@@ -2,7 +2,7 @@
 // Connecting and Configuring Displays (CCD) API Llampec uses for HDR and for switching projection
 // topology (PC screen only / Duplicate / Extend / Second screen only, i.e. the Win+P menu). Only the
 // Windows 11 24H2 (build 26100+) HDR device info types are declared -- Llampec already requires that
-// build (see Platform.OsVersion) -- but SetDisplayConfig/QueryDisplayConfig themselves are plain,
+// build (SupportedOSPlatformVersion) -- but SetDisplayConfig/QueryDisplayConfig themselves are plain,
 // long-stable Windows 7+ API, not something 24H2 introduced.
 namespace Llampec.Interop;
 
@@ -14,9 +14,6 @@ public static partial class DisplayConfig
 
     /// <summary>Returns the active paths from the persistence database for the currently connected displays.</summary>
     public const uint QDC_DATABASE_CURRENT = 0x00000004;
-
-    /// <summary>DISPLAYCONFIG_PATH_INFO.flags: set by QueryDisplayConfig when the path is part of the desktop.</summary>
-    public const uint DISPLAYCONFIG_PATH_ACTIVE = 0x00000001;
 
     // ---- SetDisplayConfig flags (winuser.h) -- only the values Llampec uses, to switch projection topology ----
 
@@ -107,8 +104,6 @@ public static partial class DisplayConfig
         public fixed char monitorFriendlyDeviceName[64];
         public fixed char monitorDevicePath[128];
 
-        public readonly bool FriendlyNameFromEdid => (flags & 0x1) != 0;
-
         public string GetFriendlyName()
         {
             fixed (char* p = monitorFriendlyDeviceName)
@@ -144,6 +139,31 @@ public static partial class DisplayConfig
 
         /// <summary>Bit-field: bit 0 enableHdr, bits 1-31 reserved (must be zero).</summary>
         public uint value;
+    }
+
+    /// <summary>
+    /// The display paths for <paramref name="flags"/>, plus the current topology for QDC_DATABASE_CURRENT.
+    /// The topology can change between sizing the buffers and the query (a monitor unplugged mid-call);
+    /// that is retried with fresh sizes, as Microsoft's sample does, but boundedly so a flapping
+    /// topology cannot block the caller. Other failures throw <see cref="InvalidOperationException"/>.
+    /// </summary>
+    public static DISPLAYCONFIG_PATH_INFO[] QueryPaths(uint flags, out uint topology)
+    {
+        const int ErrorInsufficientBuffer = 122;
+        for (int attempt = 0; ; attempt++)
+        {
+            int result = GetDisplayConfigBufferSizes(flags, out uint pathCount, out uint modeCount);
+            if (result != 0) throw new InvalidOperationException($"GetDisplayConfigBufferSizes failed: {result}");
+            var paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
+            var modes = new DISPLAYCONFIG_MODE_INFO_OPAQUE[modeCount];
+            topology = 0;
+            result = flags == QDC_DATABASE_CURRENT
+                ? QueryDisplayConfigCurrentTopology(flags, ref pathCount, paths, ref modeCount, modes, out topology)
+                : QueryDisplayConfig(flags, ref pathCount, paths, ref modeCount, modes, 0);
+            if (result == ErrorInsufficientBuffer && attempt < 3) continue;
+            if (result != 0) throw new InvalidOperationException($"QueryDisplayConfig failed: {result}");
+            return pathCount < paths.Length ? paths[..(int)pathCount] : paths;
+        }
     }
 
     [LibraryImport("user32.dll")]

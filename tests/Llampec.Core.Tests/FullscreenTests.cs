@@ -36,7 +36,7 @@ public sealed class FullscreenTests
     private sealed class Session(WindowSystem windows, FullscreenWindowIdentity identity) : IFullscreenSession
     {
         public FullscreenWindowIdentity Identity { get; } = identity;
-        public string MonitorDescription => "Screen 2";
+
         public string MonitorDevice => @"\\.\DISPLAY2";
         public bool Claimed = true;
         public bool DisplayUnchanged { get; set; } = true;
@@ -53,7 +53,7 @@ public sealed class FullscreenTests
             return windows.Read(foreground) is { IsEligible: true }
                 ? FullscreenForegroundDisposition.DifferentWindow : FullscreenForegroundDisposition.Preserve;
         }
-        public void UpdatePointer(long now) => PointerUpdates++;
+        public void UpdatePointer(long now, bool targetActive) => PointerUpdates++;
         public void ReapplyShellPolicy() => Reapplies++;
         public void RevealTaskbar() { }
         public void CoverTaskbar() { }

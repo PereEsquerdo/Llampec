@@ -14,6 +14,13 @@ public enum ActionKind
     /// listing <see cref="IQuickAction.SubActions"/> (e.g. HDR per monitor, projection modes).
     /// </summary>
     ToggleWithSubpage,
+
+    /// <summary>
+    /// Split tile: the left part is a <see cref="Button"/>, the chevron opens the sub-page (e.g. opening the
+    /// touch keyboard, with its taskbar-icon choice in the sub-page). <see cref="IQuickAction.State"/> On
+    /// highlights the chevron.
+    /// </summary>
+    ButtonWithSubpage,
 }
 
 /// <summary>Current state of an action, as last read from the system.</summary>
@@ -29,8 +36,8 @@ public enum ActionState
 }
 
 /// <summary>
-/// A tile in the Llampec panel. Implement this (usually through <see cref="QuickActionBase"/>) and register
-/// the class in <see cref="ActionCatalog"/>; nothing else needs to change.
+/// A tile in the Llampec panel. Implement this (usually through <see cref="QuickActionBase"/>), describe it
+/// in <see cref="ModuleCatalog"/> and create it in the app's module switch (see docs/ADDING_AN_ACTION.md).
 /// </summary>
 public interface IQuickAction
 {
@@ -62,7 +69,7 @@ public interface IQuickAction
     /// <summary>True while an <see cref="ExecuteAsync"/> call is in progress; the tile ignores input meanwhile.</summary>
     bool IsBusy { get; }
 
-    /// <summary>Sub-page items for <see cref="ActionKind.ToggleWithSubpage"/>; empty otherwise.</summary>
+    /// <summary>Sub-page items for <see cref="ActionKind.ToggleWithSubpage"/> and <see cref="ActionKind.ButtonWithSubpage"/>; empty otherwise.</summary>
     IReadOnlyList<IQuickAction> SubActions { get; }
 
     /// <summary>

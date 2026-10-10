@@ -1,7 +1,6 @@
 // Independent Win32 implementation. The one-pixel reveal transition follows Chromium's
 // documented OnBackgroundFullscreen idea; no shell preferences or shell window states are changed.
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using Llampec.Diagnostics;
@@ -52,9 +51,6 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
     private void OnWindowEvent(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time)
     {
         if (_disposed || window == 0 || (eventType != 3 && (objectId != 0 || childId != 0))) return;
-        // Location changes during our own resize are handled by the active poller. Global
-        // motion must not rebuild the tile on every animation frame.
-        if (eventType is not (3 or 0x8000 or 0x8001 or 0x8002 or 0x8003 or 0x800C or 0x8017 or 0x8018)) return;
         try { WindowChanged?.Invoke(); }
         catch (Exception ex) { Log.Warn($"Fullscreen window event failed: {ex.Message}"); }
     }
@@ -70,7 +66,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         var className = new StringBuilder(256);
         GetClassName(handle, className, className.Capacity);
         if (Platform.ProcessImage.Name(process) is not { } processName) return null;
-        bool shell = IsShellSurface(className.ToString(), processName);
+        bool shell = Platform.ShellSurfaces.IsShellClass(className.ToString()) || Platform.ShellSurfaces.IsShellProcess(processName);
         bool visible = IsWindowVisible(handle), minimized = IsIconic(handle);
         uint style, extendedStyle;
         try { style = ReadStyle(handle, StyleIndex); extendedStyle = ReadStyle(handle, ExStyleIndex); }
@@ -104,7 +100,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         _taskbar ??= new TaskbarPolicy();
         var trial = new Trial(identity.Handle, _taskbar);
         Session? session = null;
-        try { session = new Session(this, trial, identity); trial.Enter(false); return session; }
+        try { session = new Session(this, trial, identity); trial.Enter(); return session; }
         catch (Exception activation)
         {
             try { trial.Restore(); }
@@ -126,7 +122,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         private int _taskbarHeight;
         private long _nextTaskbarCheck;
         public FullscreenWindowIdentity Identity { get; }
-        public string MonitorDescription { get; }
+
         public string MonitorDevice { get; }
         public bool OwnsWindow => _trial.OwnsWindow();
         public bool IsVisible => IsWindowVisible(Identity.Handle);
@@ -139,7 +135,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
             _windows = windows; _trial = trial; Identity = identity;
             MonitorDetails details = ReadMonitorDetails(trial.MonitorHandle);
             MonitorDevice = details.Device;
-            MonitorDescription = details.Device;
+
         }
 
         public FullscreenForegroundDisposition ClassifyForeground(nint foreground)
@@ -152,7 +148,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
                 : FullscreenForegroundDisposition.Preserve;
         }
 
-        public void UpdatePointer(long now)
+        public void UpdatePointer(long now, bool targetActive)
         {
             using var dpi = new DpiScope();
             if (now >= _nextTaskbarCheck)
@@ -161,7 +157,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
                 _nextTaskbarCheck = now + 250;
             }
             if (!GetCursorPos(out Point cursor)) throw new Win32Exception();
-            bool active = _taskbarHeight > 0 && ClassifyForeground(_windows.ForegroundWindow) == FullscreenForegroundDisposition.Target;
+            bool active = _taskbarHeight > 0 && targetActive;
             if (_taskbarHeight == 0 && _edge.Revealed)
             {
                 _trial.Cover();
@@ -206,12 +202,6 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         return title.ToString().Trim();
     }
 
-    internal static bool IsShellSurface(string className, string processName)
-        => className is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd"
-            or "Shell_NotificationOverflowWindow" or "NotifyIconOverflowWindow" or "XamlExplorerHostIslandWindow"
-            or "#32768" or "#32769" or "MultitaskingViewFrame" or "TaskSwitcherWnd"
-        || processName.ToLowerInvariant() is "startmenuexperiencehost" or "shellexperiencehost" or "shellhost"
-            or "searchhost" or "searchapp" or "textinputhost" or "lockapp" or "widgets" or "widgetservice";
 
     // Secondary taskbars are independent Shell_SecondaryTrayWnd windows. A monitor with no
     // taskbar still supports fullscreen, but there is no local bar to reveal.
@@ -230,25 +220,23 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         nint registeredBar = (nint)Shell32.SHAppBarMessage(Shell32.ABM_GETAUTOHIDEBAREX, ref data);
         uint dpi = GetDpiForMonitor(monitorHandle);
         int ReadHeight(nint window, bool registeredForMonitor = false)
-        {
-            name.Clear();
-            GetClassName(window, name, name.Capacity);
-            if (name.ToString() is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd")) return 0;
-            return GetWindowRect(window, out Rect rect) ? TaskbarInteractionHeight(monitor, rect, dpi, registeredForMonitor) : 0;
-        }
+            => GetWindowRect(window, out Rect rect) ? TaskbarInteractionHeight(monitor, rect, dpi, registeredForMonitor) : 0;
         if (registeredBar != 0)
         {
-            int registeredHeight = ReadHeight(registeredBar, registeredForMonitor: true);
+            name.Clear();
+            GetClassName(registeredBar, name, name.Capacity);
+            int registeredHeight = name.ToString() is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd"
+                ? ReadHeight(registeredBar, registeredForMonitor: true) : 0;
             if (registeredHeight > 0) return registeredHeight;
         }
 
+        // The primary taskbar plus one Shell_SecondaryTrayWnd per other monitor that shows one.
         int height = 0;
-        EnumWindows((window, _) =>
-        {
-            if (MonitorFromWindow(window, 2) != monitorHandle) return true;
-            height = Math.Max(height, ReadHeight(window));
-            return true;
-        }, 0);
+        nint primary = FindWindowEx(0, 0, "Shell_TrayWnd", null);
+        if (primary != 0 && MonitorFromWindow(primary, 2) == monitorHandle) height = ReadHeight(primary);
+        for (nint bar = FindWindowEx(0, 0, "Shell_SecondaryTrayWnd", null); bar != 0;
+            bar = FindWindowEx(0, bar, "Shell_SecondaryTrayWnd", null))
+            if (MonitorFromWindow(bar, 2) == monitorHandle) height = Math.Max(height, ReadHeight(bar));
         return height;
     }
 
@@ -269,9 +257,11 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
     private static uint GetDpiForMonitor(nint monitor)
         => GetDpiForMonitorNative(monitor, 0, out uint x, out _) >= 0 ? x : 96;
 
-    private sealed class DpiScope : IDisposable
+    /// <summary>A struct, so the per-tick <c>using var</c> allocates nothing.</summary>
+    private readonly struct DpiScope : IDisposable
     {
-        private readonly nint _previous = EnterDpiContext();
+        private readonly nint _previous;
+        public DpiScope() => _previous = EnterDpiContext();
         public void Dispose() => SetThreadDpiAwarenessContext(_previous);
     }
 
@@ -286,10 +276,9 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
     }
 
     private delegate void WinEventProc(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time);
-    private delegate bool EnumWindowsProc(nint window, nint param);
+    [DllImport("user32.dll", EntryPoint = "FindWindowExW", CharSet = CharSet.Unicode)] private static extern nint FindWindowEx(nint parent, nint after, string className, string? title);
     [DllImport("user32.dll")] private static extern nint SetWinEventHook(uint min, uint max, nint module, WinEventProc callback, uint process, uint thread, uint flags);
     [DllImport("user32.dll")] private static extern bool UnhookWinEvent(nint hook);
-    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, nint param);
     [DllImport("user32.dll")] private static extern nint GetWindow(nint window, uint command);
     [DllImport("shcore.dll", EntryPoint = "GetDpiForMonitor")] private static extern int GetDpiForMonitorNative(nint monitor, uint type, out uint x, out uint y);
     const int StyleIndex = -16, ExStyleIndex = -20;
@@ -364,7 +353,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         readonly uint originalDpi;
         readonly TaskbarPolicy taskbar;
         readonly string property = "Llampec.Fullscreen." + Guid.NewGuid().ToString("N");
-        readonly IntPtr token = new IntPtr(Process.GetCurrentProcess().Id);
+        readonly IntPtr token = Environment.ProcessId;
         bool claimed, restored, markingAttempted, cornerPreferenceChanged, geometryCalibrated;
         nint originalRegion;
         Rect savedRegionBounds;
@@ -374,7 +363,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
         Rect coverBounds;
         public Rect Monitor { get { return monitor; } }
         public IntPtr MonitorHandle { get { return monitorHandle; } }
-        public IntPtr Window { get { return window; } }
+
 
         public Trial(IntPtr target, TaskbarPolicy policy)
         {
@@ -434,7 +423,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
             return MonitorFromWindow(window, 2) == monitorHandle && GetMonitorInfo(monitorHandle, ref info) && info.Monitor.EqualsRect(monitor);
         }
 
-        public void Enter(bool failAfterStyle)
+        public void Enter()
         {
             RequireOwnership();
             ShowWindow(window, 9); // SW_RESTORE; preserve app controls, remove only its standard frame.
@@ -449,7 +438,7 @@ internal sealed class NativeFullscreenWindowSystem : IFullscreenWindowSystem
                 Marshal.ThrowExceptionForHR(DwmSetWindowAttribute(window, CornerPreferenceAttribute, ref doNotRound, 4));
                 cornerPreferenceChanged = true;
             }
-            if (failAfterStyle) throw new InvalidOperationException("Synthetic failure after changing style.");
+
             Cover();
         }
         void SetRawBounds(Rect expected)

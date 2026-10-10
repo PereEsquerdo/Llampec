@@ -165,7 +165,8 @@ public sealed class FullscreenService : IDisposable
                 if (!active.DisplayUnchanged) { Stop(); return; }
             }
             nint foreground = _windows.ForegroundWindow;
-            if (active.ClassifyForeground(foreground) == FullscreenForegroundDisposition.DifferentWindow)
+            var disposition = active.ClassifyForeground(foreground);
+            if (disposition == FullscreenForegroundDisposition.DifferentWindow)
             {
                 var other = _windows.Read(foreground);
                 if (other is null) _differentWindow = null;
@@ -173,7 +174,7 @@ public sealed class FullscreenService : IDisposable
                 else if (now - _differentSince >= 120) { Stop(); return; }
             }
             else _differentWindow = null;
-            active.UpdatePointer(now);
+            active.UpdatePointer(now, disposition == FullscreenForegroundDisposition.Target);
         }
         catch (Exception ex)
         {

@@ -5,7 +5,7 @@ namespace Llampec.Actions.Hdr;
 
 /// <summary>
 /// One physical display's HDR switch, identified by the adapter/target pair QueryDisplayConfig reports
-/// for it. A sub-tile of <see cref="HdrAction"/>; never registered in <see cref="ActionCatalog"/> directly.
+/// for it. A sub-tile of <see cref="HdrAction"/>, created from the displays active at startup.
 /// </summary>
 public sealed class HdrMonitorAction : QuickActionBase
 {

@@ -12,8 +12,8 @@ public sealed partial class FlyoutWindow
 {
     private enum UtilityPage { None, Settings, Editor }
     private UtilityPage _utilityPage;
-    private LogitechMouseView? _logitechMouseView;
-    private static string T(string key) => UiText.Get(key);
+
+
 
     private void UpdateLanguage()
     {
@@ -30,13 +30,8 @@ public sealed partial class FlyoutWindow
         ReleasePanelEditor();
         foreach (var unsubscribe in _subUnsubscribe) unsubscribe();
         _subUnsubscribe.Clear();
-        _scheduleView?.Dispose(); _scheduleView = null;
-        _caffeineView?.Dispose(); _caffeineView = null;
-        _alwaysOnTopView?.Dispose(); _alwaysOnTopView = null;
-        _fullscreenView?.Dispose(); _fullscreenView = null;
-        _rotationView?.Dispose(); _rotationView = null;
-        _logitechMouseView?.Dispose(); _logitechMouseView = null;
-        _powerView?.Dispose(); _powerView = null;
+        _subpageView?.Dispose();
+        _subpageView = null;
         Subpage.Children.Clear();
     }
 
@@ -52,7 +47,7 @@ public sealed partial class FlyoutWindow
     {
         _utilityPage = UtilityPage.None;
         if (_model.Subpage is not null) _model.CloseSubpage();
-        else OnModelChanged(_model, new System.ComponentModel.PropertyChangedEventArgs(nameof(_model.Subpage)));
+        else ApplyPage();
     }
 
     private void BeginUtilityPage(UtilityPage page, string title)
@@ -74,11 +69,6 @@ public sealed partial class FlyoutWindow
         else _model.CloseSubpage();
     }
 
-    private static TextBlock Note(string text) => new()
-    {
-        Text = T(text), FontSize = 12, TextWrapping = TextWrapping.Wrap,
-        Opacity = 0.75,
-    };
 
     private void ShowSettings()
     {
@@ -132,17 +122,14 @@ public sealed partial class FlyoutWindow
             }
         };
         Subpage.Children.Add(start);
-        Subpage.Children.Add(Note("Opens in the notification area when you sign in."));
-        Subpage.Children.Add(Note("Windows can also disable startup. After moving Llampec, open it once to update its startup location."));
+        Subpage.Children.Add(Note("Opens in the notification area when you sign in.", 0.75));
+        Subpage.Children.Add(Note("Windows can also disable startup. After moving Llampec, open it once to update its startup location.", 0.75));
         var windowsStartup = new HyperlinkButton { Content = T("Windows startup apps"), Padding = new Thickness(0) };
         windowsStartup.Click += async (_, _) =>
         {
-            try
-            {
-                if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:startupapps")))
-                    throw new InvalidOperationException();
-            }
-            catch { ErrorBar.Message = T("Could not open Windows Settings."); ErrorBar.IsOpen = true; }
+            if (await OpenSettingsAsync("ms-settings:startupapps")) return;
+            ErrorBar.Message = T("Could not open Windows Settings.");
+            ErrorBar.IsOpen = true;
         };
         Subpage.Children.Add(windowsStartup);
         var reorder = new Button { Content = T("Buttons and categories"), HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 12, 0, 0) };
@@ -161,7 +148,7 @@ private async void ShowAbout()
             .InformationalVersion.Split('+')[0] ?? assembly.GetName().Version?.ToString(3) ?? "";
         string copyright = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright
             ?? "Copyright (c) 2026 Pere Esquerdo Ramis";
-        _dialogOpen = true;
+        Hold(true);
         try
         {
             var content = new StackPanel { Spacing = 12 };
@@ -170,19 +157,25 @@ private async void ShowAbout()
                 Text = $"{T("Version")} {version}\n{copyright}\n{T("Open-source software · MIT License")}",
                 TextWrapping = TextWrapping.Wrap,
             });
+            // A personal dedication, the same in every language.
+            content.Children.Add(new TextBlock
+            {
+                Text = "Dedicat a Lara i Miquel \U0001FAF6", FontStyle = Windows.UI.Text.FontStyle.Italic,
+                TextWrapping = TextWrapping.Wrap,
+            });
             content.Children.Add(new HyperlinkButton
             {
                 Content = T("Source code on GitHub"), NavigateUri = new Uri("https://github.com/PereEsquerdo/Llampec"),
                 Padding = new Thickness(0),
             });
             content.Children.Add(new TextBlock { Text = T("Acknowledgements"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-            content.Children.Add(Note("Always on Top inspired by Microsoft PowerToys."));
+            content.Children.Add(Note("Always on Top inspired by Microsoft PowerToys.", 0.75));
             content.Children.Add(new HyperlinkButton
             {
                 Content = "Microsoft PowerToys · MIT", NavigateUri = new Uri("https://github.com/microsoft/PowerToys"),
                 Padding = new Thickness(0),
             });
-            content.Children.Add(Note("Logitech HID++ feature code adapted from Mouser."));
+            content.Children.Add(Note("Logitech HID++ feature code adapted from Mouser.", 0.75));
             content.Children.Add(new HyperlinkButton
             {
                 Content = "Mouser · MIT", NavigateUri = new Uri("https://github.com/TomBadash/Mouser"),
@@ -192,6 +185,6 @@ private async void ShowAbout()
                 Title = T("About Llampec"), Content = content,
                 CloseButtonText = T("Close") }.ShowAsync();
         }
-        finally { _dialogOpen = false; }
+        finally { Hold(false); }
     }
 }

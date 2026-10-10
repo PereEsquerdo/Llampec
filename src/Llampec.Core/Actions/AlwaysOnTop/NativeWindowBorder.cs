@@ -24,6 +24,7 @@ public sealed partial class NativeWindowBorder : IAlwaysOnTopBorder
     private bool _targetDestroyed;
     private bool _refreshQueued;
     private int _thickness = 3;
+    private uint? _color;
     private (int Width, int Height, int Thickness, int CornerRadius) _regionSize;
 
     public NativeWindowBorder(nint target)
@@ -74,7 +75,8 @@ public sealed partial class NativeWindowBorder : IAlwaysOnTopBorder
             Dwm.SetInt(_handle, Dwm.DWMWA_WINDOW_CORNER_PREFERENCE, Dwm.DWMWCP_DONOTROUND);
             Dwm.SetUInt(_handle, Dwm.DWMWA_BORDER_COLOR, Dwm.DWMWA_COLOR_NONE);
 
-            AddHook(0x8001, 0x800B, targetProcess, targetThread); // destroy/show/hide, reorder/state/location
+            AddHook(0x8001, 0x8004, targetProcess, targetThread); // destroy/show/hide/reorder
+            AddHook(0x800A, 0x800B, targetProcess, targetThread); // state/location; not focus or selection
             AddHook(0x8017, 0x8018, targetProcess, targetThread); // cloak/uncloak (virtual desktops)
             AddHook(0x0016, 0x0017, targetProcess, targetThread); // minimize/restore
             AddHook(0x000A, 0x000B, targetProcess, targetThread); // move/size start/end
@@ -87,11 +89,12 @@ public sealed partial class NativeWindowBorder : IAlwaysOnTopBorder
         }
     }
 
-    public void Update(int thickness)
+    public void Update(int thickness, uint? color)
     {
         VerifyThread();
         ObjectDisposedException.ThrowIf(_disposed, this);
         _thickness = Math.Clamp(thickness, 1, 8);
+        _color = color;
         RefreshBrush();
         RefreshGeometry();
     }
@@ -313,12 +316,16 @@ public sealed partial class NativeWindowBorder : IAlwaysOnTopBorder
 
     private void RefreshBrush()
     {
+        // High contrast keeps the system highlight color, even over a custom color.
         uint color = Native.GetSysColor(13 /* COLOR_HIGHLIGHT */);
         var contrast = new HighContrast { Size = (uint)Marshal.SizeOf<HighContrast>() };
         bool highContrast = Native.SystemParametersInfo(0x0042 /* SPI_GETHIGHCONTRAST */,
             contrast.Size, ref contrast, 0) && (contrast.Flags & 1) != 0;
-        if (!highContrast && Dwm.DwmGetColorizationColor(out uint argb, out _) == 0)
-            color = ((argb >> 16) & 0xFF) | (argb & 0xFF00) | ((argb & 0xFF) << 16); // COLORREF is BGR
+        if (!highContrast)
+        {
+            uint rgb = _color ?? Platform.SystemTheme.GetAccentColorRgb();
+            color = ((rgb >> 16) & 0xFF) | (rgb & 0xFF00) | ((rgb & 0xFF) << 16); // COLORREF is BGR
+        }
 
         nint brush = Native.CreateSolidBrush(color);
         if (brush == 0)
@@ -356,7 +363,12 @@ public sealed partial class NativeWindowBorder : IAlwaysOnTopBorder
                     return -1; // HTTRANSPARENT
                 case 0x0021: // WM_MOUSEACTIVATE
                     return 3; // MA_NOACTIVATE
-                case 0x001A: // WM_SETTINGCHANGE
+                case 0x001A: // WM_SETTINGCHANGE: only high contrast and accent changes recolor.
+                    if (!_disposed && (wParam == 0x0043 /* SPI_SETHIGHCONTRAST */
+                        || (lParam != 0 && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")))
+                        RefreshBrush();
+                    QueueRefresh();
+                    return 0;
                 case 0x031A: // WM_THEMECHANGED
                 case 0x0320: // WM_DWMCOLORIZATIONCOLORCHANGED
                     if (!_disposed)

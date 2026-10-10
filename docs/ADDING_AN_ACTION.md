@@ -5,8 +5,12 @@ There is no plugin discovery or DI container.
 
 1. Create a class under `src/Llampec.Core/Actions/<Name>/` deriving from `QuickActionBase`.
 2. Implement stable `Id`, `Title`, `Glyph`, `Kind`, `Refresh()` and `ExecuteCoreAsync()`.
-3. Register it in `ActionCatalog.Create`; catalog order is the default display order.
-4. Test both system themes, keyboard navigation and multiple display scales.
+3. Describe it in `ModuleCatalog.All` (catalog order is the default display order) and
+   create it in `App.EnableModule`; release any service it owns in `RemoveModuleAsync`.
+   `ModuleCatalogTests` checks that the descriptor matches the action.
+4. Add a view to `FlyoutWindow.CreateSubpageView` if its sub-page needs more than the
+   generic switches or radio buttons.
+5. Test both system themes, keyboard navigation and multiple display scales.
 
 ## Contract
 
@@ -21,6 +25,8 @@ There is no plugin discovery or DI container.
   wake the monitor.
 - `ToggleWithSubpage` exposes independent child switches. Set
   `SubActionsAreExclusive` for a radio-button list such as projection.
+  `ButtonWithSubpage` combines a button (run with the panel hidden) with the same
+  sub-page; `State` On highlights its arrow, as for the touch keyboard.
 - `Subtitle` describes secondary state; `GlyphBadge` adds a small secondary glyph.
 - Use documented Win32 APIs through `Interop`, or WinRT APIs through the Windows SDK.
 - Observe each API's threading, permissions and package-identity requirements.
