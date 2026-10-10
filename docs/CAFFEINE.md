@@ -45,6 +45,31 @@ References: [PowerSetRequest](https://learn.microsoft.com/en-us/windows/win32/ap
 [PowerToys Awake behaviour](https://learn.microsoft.com/en-us/windows/powertoys/awake),
 [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font).
 
+## Modern Standby, Turn off display and local agents
+
+Measured on the Surface (ARM64, build 28000, Modern Standby "S0 low power idle,
+network connected", sign-in required every time on wake) on 2026-10-11. A separate
+process wrote a heartbeat every second to stand in for a local agent.
+
+| Screen off by | Caffeine-style request | Standby entered | Agent | Session |
+| --- | --- | --- | --- | --- |
+| **Turn off display** (`SC_MONITORPOWER`) | none, as the button | yes | paused | locked |
+| **Turn off display** (`SC_MONITORPOWER`) | `PowerRequestSystemRequired` | yes | paused 78 s and 664 s in two of three runs | locked |
+| Display idle timeout | `PowerRequestSystemRequired` | yes (event 506) | **kept running** (179 beats in 180 s, gaps ≤ 1 s) | locked |
+
+Adding `PowerRequestExecutionRequired` did not keep the button's standby from
+pausing processes either. On this device, turning the screen off on demand is
+therefore a short standby: desktop programs pause and Windows asks for sign-in
+according to its own setting. Llampec does not offer a "screen off but keep working"
+variant of the button, because no supported request made it reliable.
+
+For local agents, keep **Caffeine** on (without keeping the display on) and let the
+screen turn off by inactivity: programs keep running. Windows still locks the
+session according to **Settings > Accounts > Sign-in options > "If you've been
+away, when should Windows require you to sign in again?"**; that security choice
+belongs to the user, not to Llampec. Agents that need the visible desktop (computer
+use) cannot work while it is locked.
+
 ## Validation
 
 Deterministic tests cover off/indefinite allocation, main-button toggling, all preset

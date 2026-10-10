@@ -25,7 +25,10 @@ CPU use:
 Llampec lives in the notification area and provides fourteen configurable quick actions:
 
 - **HDR:** switch all compatible displays or control each display separately.
-- **Display power:** turn off the displays.
+- **Display power:** turn off the displays. On Modern Standby devices this enters a
+  short standby: programs pause and Windows may ask for sign-in. To keep a local
+  agent working, use Caffeine and let the screen turn off by itself; see
+  [Caffeine and Modern Standby](docs/CAFFEINE.md#modern-standby-turn-off-display-and-local-agents).
 - **Light/dark mode:** change the Windows theme, with optional fixed-hour or
   sunrise/sunset scheduling and a countdown to the next change.
 - **Multiple displays:** choose PC screen only, Duplicate, Extend or Second screen only.
