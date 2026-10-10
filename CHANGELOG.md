@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.9 — 2026-10-11
+
+- Add a per-user **installer** for ARM64 and x64 (Inno Setup): no administrator
+  rights, Start menu shortcut, optional start with Windows, .NET 10 Runtime check,
+  in-place upgrades that first close Llampec normally, and uninstallation that keeps
+  settings. The portable archives remain available.
 
 - Add a **Power** module. Tapping it cycles the power mode for the current power
   source. Its options choose the power plan (when Windows offers more than one) and

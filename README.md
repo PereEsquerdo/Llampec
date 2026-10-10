@@ -87,16 +87,26 @@ per-user startup, and button reordering.
 - ARM64 or x64.
 - .NET 10 Runtime matching the application architecture.
 
-The portable build includes its Windows App SDK dependencies. Keep the entire
-application folder together; copying only `Llampec.exe` is insufficient.
-This alpha does not include an installer or code signing.
+## Install
+
+Download from [Releases](https://github.com/PereEsquerdo/Llampec/releases) the file for
+your architecture (ARM64 or x64):
+
+- **Installer** (`Llampec-<version>-win-<architecture>-setup.exe`): installs for the
+  current user only, without administrator rights, in `%LOCALAPPDATA%\Programs\Llampec`,
+  with a Start menu shortcut and an optional start with Windows. It warns when the
+  .NET 10 Runtime is missing and offers its download page. Running a newer installer
+  upgrades in place; uninstall from Windows Settings > Apps. Settings in
+  `%LOCALAPPDATA%\Llampec` are kept.
+- **Portable archive** (`.zip`): extract it to a permanent folder and keep the whole
+  folder together; copying only `Llampec.exe` is insufficient.
+
+Both include the Windows App SDK dependencies. The files are not code-signed yet, so
+Windows SmartScreen may ask for confirmation (**More info > Run anyway**).
 
 ## Use
 
-Download the archive for your architecture from [Releases](https://github.com/PereEsquerdo/Llampec/releases)
-and extract it to a permanent folder.
-
-Open `Llampec.exe`, click its notification-area icon, or press **Ctrl+Alt+Space**.
+Open Llampec from the Start menu (or `Llampec.exe`), click its notification-area icon, or press **Ctrl+Alt+Space**.
 Click outside the panel or press **Escape** to close it. Right-click the icon for
 the menu; the gear opens Settings. Use `Llampec.exe --background` to start silently.
 
@@ -184,8 +194,10 @@ for either target:
 
 The script publishes Release, verifies the executable and required WinUI PRI/XBF
 resources, includes the README, license and dependency notices, and creates
-`publish/Llampec-0.2.0-alpha.8-<architecture>.zip`. It refuses to reuse an existing
-output folder. Keep the complete extracted folder together.
+`publish/Llampec-<version>-<architecture>.zip`. With Inno Setup 6 installed
+(`winget install JRSoftware.InnoSetup`) it also builds the per-user installer
+`publish/Llampec-<version>-win-<architecture>-setup.exe` from `installer/Llampec.iss`.
+It refuses to reuse an existing output folder.
 
 For a development publish without packaging:
 

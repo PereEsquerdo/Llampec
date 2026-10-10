@@ -34,3 +34,18 @@ foreach ($library in $assets.libraries.PSObject.Properties) {
 $archive = "$output.zip"
 Compress-Archive -Path "$output/*" -DestinationPath $archive -CompressionLevel Optimal
 Get-FileHash -LiteralPath $archive -Algorithm SHA256 | Format-List
+
+# The per-user installer is built when Inno Setup 6 is available (winget install JRSoftware.InnoSetup).
+$iscc = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source,
+    (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+if ($iscc) {
+    # Windows file versions are numeric: 0.2.0-alpha.9 becomes 0.2.0.9.
+    $fileVersion = $version.Split('-')[0] + '.' + $(if ($version -match '\.(\d+)$') { $Matches[1] } else { '0' })
+    $arch = $RuntimeIdentifier.Substring(4)
+    & $iscc /Q "/DAppVersion=$version" "/DFileVersion=$fileVersion" "/DArch=$arch" "/DSourceDir=$output" `
+        "/DOutputDir=$(Join-Path $root 'publish')" (Join-Path $root 'installer/Llampec.iss')
+    if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+    Get-FileHash -LiteralPath (Join-Path $root "publish/Llampec-$version-win-$arch-setup.exe") -Algorithm SHA256 | Format-List
+}
+else { Write-Warning 'Inno Setup 6 was not found; only the portable archive was created.' }
