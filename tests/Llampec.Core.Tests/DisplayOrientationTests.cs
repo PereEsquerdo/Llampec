@@ -109,7 +109,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(External, Internal);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(0, backend.Shortcuts);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(DisplayOrientation.Portrait, backend.Current.Find(External.Id)!.Orientation);
@@ -125,7 +125,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.True(backend.Current.Rotation.IsLocked);
         Assert.Equal(["lock", "apply:surface:Portrait:True"], backend.Operations);
         Assert.False(service.RecoveryPending);
@@ -136,7 +136,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         await service.DisposeAsync();
         Assert.Equal(DisplayOrientation.Portrait, backend.Current.Find(Internal.Id)!.Orientation);
         Assert.Equal(backend.Current.Find(Internal.Id)!.Mode, backend.Current.Find(Internal.Id)!.SavedMode);
@@ -150,13 +150,13 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         await using var service = new DisplayOrientationService(backend, new RejectTimersTimeProvider());
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.LandscapeFlipped);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.LandscapeFlipped, TestContext.Current.CancellationToken);
         Assert.Equal(DisplayOrientation.LandscapeFlipped, backend.Current.Find(Internal.Id)!.Orientation);
         Assert.Equal(2, backend.Applies.Count);
         Assert.Equal(1, backend.Shortcuts);
         Assert.False(service.RecoveryPending);
-        await service.ToggleLockAsync();
+        await service.ToggleLockAsync(TestContext.Current.CancellationToken);
         Assert.False(backend.Current.Rotation.IsLocked);
     }
 
@@ -165,7 +165,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Landscape);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Landscape, TestContext.Current.CancellationToken);
         Assert.True(backend.Current.Rotation.IsLocked);
         Assert.Empty(backend.Applies);
         Assert.False(service.RecoveryPending);
@@ -176,7 +176,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(External with { SavedMode = External.Mode.WithOrientation(DisplayOrientation.Portrait) });
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Landscape);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Landscape, TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.True(backend.Applies[0].Persist);
         Assert.Equal(External.Mode, backend.Current.Find(External.Id)!.SavedMode);
@@ -187,7 +187,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal with { IsCloned = true });
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Empty(backend.Applies);
         Assert.Equal(0, backend.Shortcuts);
         Assert.Equal("Use Extend to rotate displays separately", service.MessageKey);
@@ -198,7 +198,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Empty(backend.Applies);
         Assert.Equal(0, backend.Shortcuts);
         Assert.Equal("The selected display was disconnected", service.MessageKey);
@@ -215,7 +215,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(Internal);
         backend.Flags(flags);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(DisplayOrientation.Portrait, backend.Current.Find(Internal.Id)!.Orientation);
         Assert.Equal(backend.Current.Find(Internal.Id)!.Mode, backend.Current.Find(Internal.Id)!.SavedMode);
@@ -236,7 +236,7 @@ public sealed class DisplayOrientationTests
         backend.Flags(before);
         backend.AfterTest = () => { backend.Flags(after); backend.AfterTest = null; };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(shortcuts, backend.Shortcuts);
         Assert.Equal(DisplayOrientation.Portrait, backend.Current.Find(Internal.Id)!.Orientation);
         Assert.Equal("Orientation applied", service.MessageKey);
@@ -250,7 +250,7 @@ public sealed class DisplayOrientationTests
         backend.Flags(AutoRotationFlags.Laptop);
         backend.AfterApply = call => { if (call == 1) backend.Flags(AutoRotationFlags.Enabled); };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.False(backend.Current.Rotation.IsLocked);
@@ -265,7 +265,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(Internal) { FailTest = true };
         backend.Flags(AutoRotationFlags.Laptop);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Empty(backend.Applies);
         Assert.Equal(0, backend.Shortcuts);
         Assert.Equal("This orientation is not supported", service.MessageKey);
@@ -280,7 +280,7 @@ public sealed class DisplayOrientationTests
         backend.PartialLiveAt.Add(1);
         backend.PartialSaveAt.Add(1);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.Equal(AutoRotationFlags.Laptop, backend.Current.Rotation.Flags);
@@ -300,14 +300,14 @@ public sealed class DisplayOrientationTests
             if (call == 1) backend.Flags(AutoRotationFlags.Disabled | AutoRotationFlags.Laptop);
         };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.True(service.RecoveryPending);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.True(backend.Current.Rotation.IsLocked);
         Assert.Equal(1, backend.Shortcuts);
         backend.Flags(AutoRotationFlags.Disabled);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.False(backend.Current.Rotation.IsLocked);
         Assert.Equal(2, backend.Shortcuts);
@@ -322,7 +322,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(Internal);
         backend.Flags(flags);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Empty(backend.Applies);
         Assert.Equal(0, backend.Shortcuts);
         Assert.False(service.RecoveryPending);
@@ -335,7 +335,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(Internal);
         backend.Flags(AutoRotationFlags.NoSensor);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(DisplayOrientation.Portrait, backend.Current.Find(Internal.Id)!.Orientation);
         Assert.False(service.RecoveryPending);
         Assert.Equal(0, backend.Shortcuts);
@@ -346,7 +346,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal) { SendAccepted = false };
         await using var service = new DisplayOrientationService(backend);
-        await service.ToggleLockAsync();
+        await service.ToggleLockAsync(TestContext.Current.CancellationToken);
         Assert.False(service.Snapshot.Rotation.IsLocked);
         Assert.Equal("Release the keyboard keys and try again", service.MessageKey);
         Assert.Empty(backend.Applies);
@@ -357,7 +357,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal) { FailTest = true };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(0, backend.Shortcuts);
         Assert.Empty(backend.Applies);
         Assert.Equal("This orientation is not supported", service.MessageKey);
@@ -376,7 +376,7 @@ public sealed class DisplayOrientationTests
         if (changedLive) backend.PartialLiveAt.Add(1);
         if (changedSaved) backend.PartialSaveAt.Add(1);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(saved, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.False(backend.Current.Rotation.IsLocked);
@@ -390,7 +390,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(Internal);
         backend.IgnoreApplyAt.Add(1);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.False(backend.Current.Rotation.IsLocked);
         Assert.Equal("Windows could not verify the orientation", service.MessageKey);
@@ -403,7 +403,7 @@ public sealed class DisplayOrientationTests
         var backend = new Backend(External);
         backend.IgnoreSaveAt.Add(1);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(External.Mode, backend.Current.Find(External.Id)!.Mode);
         Assert.False(service.RecoveryPending);
         Assert.Equal("Windows could not verify the orientation", service.MessageKey);
@@ -417,11 +417,11 @@ public sealed class DisplayOrientationTests
         backend.PartialLiveAt.Add(1);
         backend.PartialSaveAt.Add(1);
         await using var service = new DisplayOrientationService(backend, new RejectTimersTimeProvider());
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.True(service.RecoveryPending);
         Assert.Equal(External.Id, service.RecoveryDisplayId);
         Assert.Equal("Windows could not restore the previous orientation", service.MessageKey);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.Equal(External.Mode, backend.Current.Find(External.Id)!.Mode);
         Assert.Equal(External.Mode, backend.Current.Find(External.Id)!.SavedMode);
@@ -434,10 +434,10 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         await LeaveRecoveryPending(service, backend, External);
         backend.CaptureFailuresRemaining = 1;
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.True(service.RecoveryPending);
         Assert.Single(backend.Applies);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.Equal(External.Mode, backend.Current.Find(External.Id)!.Mode);
     }
@@ -466,7 +466,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         var applied = backend.Current;
         int writes = backend.Applies.Count, shortcuts = backend.Shortcuts;
 
@@ -505,10 +505,10 @@ public sealed class DisplayOrientationTests
         backend.PartialSaveAt.Add(1);
         backend.AfterApply = call => { if (call == failAfterWrite) backend.CaptureFailuresRemaining = 1; };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.True(service.RecoveryPending);
         Assert.True(backend.Current.Rotation.IsLocked);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(saved, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.False(backend.Current.Rotation.IsLocked);
@@ -529,9 +529,9 @@ public sealed class DisplayOrientationTests
         if (changedLive) backend.PartialLiveAt.Add(2);
         if (changedSaved) backend.PartialSaveAt.Add(2);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.True(service.RecoveryPending);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
         Assert.Equal(saved, backend.Current.Find(Internal.Id)!.SavedMode);
         Assert.False(backend.Current.Rotation.IsLocked);
@@ -549,7 +549,7 @@ public sealed class DisplayOrientationTests
         {
             Displays = backend.Current.Displays.Select(d => d with { SavedMode = foreign }).ToArray()
         };
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(foreign, backend.Current.Find(External.Id)!.SavedMode);
         Assert.False(service.RecoveryPending);
@@ -563,7 +563,7 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         await LeaveRecoveryPending(service, backend, External);
         backend.Change(External.Id, saved);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(saved, backend.Current.Find(External.Id)!.Mode);
         Assert.False(service.RecoveryPending);
@@ -576,7 +576,7 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         await LeaveRecoveryPending(service, backend, External);
         backend.Change(External.Id, External.Mode.WithOrientation(DisplayOrientation.LandscapeFlipped));
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(DisplayOrientation.LandscapeFlipped, backend.Current.Find(External.Id)!.Orientation);
         Assert.False(service.RecoveryPending);
@@ -590,7 +590,7 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         await LeaveRecoveryPending(service, backend, External);
         backend.Change(Internal.Id, Internal.Mode with { Frequency = 60 });
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(60u, backend.Current.Find(Internal.Id)!.Mode.Frequency);
         Assert.False(service.RecoveryPending);
@@ -603,7 +603,7 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         await LeaveRecoveryPending(service, backend, Internal);
         backend.Flags(AutoRotationFlags.Enabled);
-        await service.RevertRecoveryAsync();
+        await service.RevertRecoveryAsync(TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(1, backend.Shortcuts);
         Assert.False(backend.Current.Rotation.IsLocked);
@@ -617,7 +617,7 @@ public sealed class DisplayOrientationTests
         backend.Flags(AutoRotationFlags.Disabled);
         backend.AfterApply = _ => backend.Flags(AutoRotationFlags.Enabled);
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.False(backend.Current.Rotation.IsLocked);
         Assert.Equal(Internal.Mode, backend.Current.Find(Internal.Id)!.Mode);
@@ -635,7 +635,7 @@ public sealed class DisplayOrientationTests
             if (call == 1) backend.Change(External.Id, External.Mode.WithOrientation(DisplayOrientation.LandscapeFlipped));
         };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(DisplayOrientation.LandscapeFlipped, backend.Current.Find(External.Id)!.Orientation);
         Assert.False(service.RecoveryPending);
@@ -655,7 +655,7 @@ public sealed class DisplayOrientationTests
             if (call == 2) backend.Change(Internal.Id, Internal.Mode with { Frequency = 60 });
         };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.Equal(2, backend.Applies.Count);
         Assert.Equal(saved, backend.Current.Find(External.Id)!.Mode);
         Assert.Equal(60u, backend.Current.Find(Internal.Id)!.Mode.Frequency);
@@ -669,7 +669,7 @@ public sealed class DisplayOrientationTests
         backend.AfterApply = _ => backend.Current = backend.Current with
         { Displays = backend.Current.Displays.Select(d => d with { SourceId = "another-source" }).ToArray() };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(External.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.False(service.RecoveryPending);
         Assert.Single(backend.Applies);
         Assert.Equal("Windows could not verify the orientation", service.MessageKey);
@@ -680,7 +680,7 @@ public sealed class DisplayOrientationTests
     {
         var backend = new Backend(Internal) { FailCaptureAfterShortcut = true };
         await using var service = new DisplayOrientationService(backend);
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.Portrait, TestContext.Current.CancellationToken);
         Assert.False(backend.Current.Rotation.IsLocked);
         Assert.Empty(backend.Applies);
         Assert.Equal(2, backend.Shortcuts);
@@ -693,8 +693,8 @@ public sealed class DisplayOrientationTests
         await using var service = new DisplayOrientationService(backend);
         using var action = new RotationAction(service);
         await LeaveRecoveryPending(service, backend, Internal);
-        await service.ToggleLockAsync();
-        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.LandscapeFlipped);
+        await service.ToggleLockAsync(TestContext.Current.CancellationToken);
+        await service.ChangeOrientationAsync(Internal.Id, DisplayOrientation.LandscapeFlipped, TestContext.Current.CancellationToken);
         Assert.Single(backend.Applies);
         Assert.Equal(1, backend.Shortcuts);
         Assert.False(action.IsAvailable);
@@ -722,7 +722,7 @@ public sealed class DisplayOrientationTests
         action.Refresh();
         Assert.True(action.IsAvailable);
         Assert.Equal(ActionState.Off, action.State);
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.On, action.State);
         backend.Flags(AutoRotationFlags.Disabled | AutoRotationFlags.Laptop);
         action.Refresh();

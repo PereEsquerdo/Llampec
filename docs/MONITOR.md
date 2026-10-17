@@ -90,5 +90,8 @@ connected by USB-C DisplayPort through an HDMI adapter, 2026-10-16:
 | Write brightness 50 → 45 → 50 | applied and read back |
 | `D6` = 4 for 6 s, then `D6` = 1 | monitor kept in the desktop; answers DDC/CI while in standby; on again in ~1 s |
 
-Still to check by hand: that the panel visibly goes dark, how long it stays in DDC
-standby, and what the monitor's own power button does from that state.
+Checked by hand on 2026-10-17: the panel goes dark and comes back with Llampec. The
+monitor's own power button does not undo DDC/CI standby: it switches the monitor off
+and on, and it stays without a signal. Wake it from Llampec (the tile, its options or
+any key in agentic work); **Recover monitor** also does it. Still to check: how long
+it stays in DDC/CI standby.

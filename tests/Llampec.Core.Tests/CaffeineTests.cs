@@ -51,9 +51,9 @@ public class CaffeineTests
         using var action = new CaffeineAction(() => new() { Minutes = 0 }, _ => { requests++; return request; }, clock);
         Assert.Equal(ActionState.Off, action.State);
         Assert.Equal(0, requests); Assert.Empty(clock.Timers);
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.On, action.State); Assert.Null(action.EndsAt); Assert.Empty(clock.Timers);
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.Off, action.State); Assert.True(request.Disposed);
     }
 

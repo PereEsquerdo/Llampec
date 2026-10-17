@@ -10,7 +10,10 @@ public sealed class FullscreenNativeTests
 {
     private sealed class NativeFactAttribute : FactAttribute
     {
-        public NativeFactAttribute()
+        public NativeFactAttribute(
+            [System.Runtime.CompilerServices.CallerFilePath] string? sourceFilePath = null,
+            [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = -1)
+            : base(sourceFilePath, sourceLineNumber)
         {
             if (Environment.GetEnvironmentVariable("LLAMPEC_FULLSCREEN_NATIVE_SMOKE") != "1")
                 Skip = "Set LLAMPEC_FULLSCREEN_NATIVE_SMOKE=1 to test synthetic native windows on the current desktop.";

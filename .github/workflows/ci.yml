@@ -13,12 +13,12 @@ jobs:
   test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Test without changing the desktop or display topology
-        run: dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~SystemActionTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
+        run: dotnet test --project tests/Llampec.Core.Tests -c Release --filter-not-class Llampec.Tests.SystemActionTests --filter-not-class Llampec.Tests.HdrDisplaysTests --filter-not-class Llampec.Tests.ProjectionModesTests
       # Run locally on hardware; CI only keeps them compiling with Core.
       - name: Build the native smoke test and the Logitech probe
         run: |
@@ -31,13 +31,13 @@ jobs:
       matrix:
         rid: [win-x64, win-arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Package (${{ matrix.rid }})
         run: ./tools/package.ps1 -RuntimeIdentifier ${{ matrix.rid }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Llampec-${{ matrix.rid }}
           path: publish/*.zip

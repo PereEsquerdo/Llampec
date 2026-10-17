@@ -102,7 +102,7 @@ their own hardware checks.
 ## Automated checks
 
 ```powershell
-dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName~HidppClientTests|FullyQualifiedName~LogitechDeviceTests"
+dotnet test --project tests/Llampec.Core.Tests -c Release --filter-class Llampec.Tests.HidppClientTests --filter-class Llampec.Tests.LogitechDeviceTests
 ```
 
 These tests use fake transports. They cover interleaved notifications, packet

@@ -39,12 +39,24 @@ dotnet publish src/Llampec.App -c Release -r win-arm64 --self-contained false -o
 ./tools/test-publish.ps1 -PublishDirectory publish/win-arm64
 ```
 
+## Keeping dependencies current
+
+Llampec is meant to stay on maintained, current software: .NET 10 (LTS), the Windows
+App SDK, xUnit v3 and current GitHub Actions. `.github/dependabot.yml` asks GitHub for
+weekly update pull requests for the actions and the NuGet packages, which CI then builds
+and tests. Locally, keep the .NET 10 SDK, Git, the GitHub CLI, PowerShell 7 and Inno
+Setup updated (`winget upgrade`). Reviewed on 2026-10-17: the CI actions moved off the
+deprecated Node.js 20 (`checkout@v7`, `setup-dotnet@v6`, `upload-artifact@v7`), the
+tests from xUnit 2 to xUnit v3 on Microsoft.Testing.Platform, and the Windows App SDK
+to its latest 2.3 patches.
+
 ## Tests
 
-The tests CI runs, without touching the active display setup:
+The tests use xUnit v3 on Microsoft.Testing.Platform, selected for `dotnet test` in
+`global.json`. The tests CI runs, without touching the active display setup:
 
 ```powershell
-dotnet test tests/Llampec.Core.Tests -c Release --filter "FullyQualifiedName!~SystemActionTests&FullyQualifiedName!~HdrDisplaysTests&FullyQualifiedName!~ProjectionModesTests"
+dotnet test --project tests/Llampec.Core.Tests -c Release --filter-not-class Llampec.Tests.SystemActionTests --filter-not-class Llampec.Tests.HdrDisplaysTests --filter-not-class Llampec.Tests.ProjectionModesTests
 ```
 
 The excluded integration tests inspect the real Windows session, and

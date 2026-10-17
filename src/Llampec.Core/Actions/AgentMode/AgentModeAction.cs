@@ -39,6 +39,9 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
         public PowerMode? PreviousMode { get; set; }
         public List<DdcMonitor> MonitorsOff { get; } = [];
         public IAgentScreen? Screen { get; set; }
+        /// <summary>Auto-hide was turned on so that the taskbar, itself topmost, cannot rise above a cover.</summary>
+        public bool HidTaskbar { get; set; }
+        public AgentModeRecovery? Recovery { get; set; }
     }
 
     public AgentModeAction(Func<AgentModeSettings> settings, IAgentModePlatform platform, TimeSpan? delay = null)
@@ -98,10 +101,11 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
             var monitors = settings.MonitorStandby
                 ? (await _platform.MonitorsAsync().ConfigureAwait(false)).Where(m => m.PoweredOn == true).ToArray() : [];
             // Saved before anything changes: a crash then leaves enough to restore at the next start.
-            Try(() => _platform.SaveRecovery(new(1,
+            session.Recovery = new(1,
                 topology is { } t && t != ProjectionTopology.External ? t : null,
                 mode is { } m && m != PowerMode.BestEfficiency ? m : null,
-                [.. monitors.Select(s => s.Monitor.Name)])));
+                [.. monitors.Select(s => s.Monitor.Name)]);
+            Try(() => _platform.SaveRecovery(session.Recovery));
 
             if (mode is { } previousMode && previousMode != PowerMode.BestEfficiency
                 && Try(() => _platform.SetMode(PowerMode.BestEfficiency)))
@@ -126,7 +130,8 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
                 CoverAndPark(session);
             }).ConfigureAwait(false);
             Diagnostics.Log.Info($"Agent mode started: builtInOff={session.PreviousTopology is not null}, "
-                + $"standby={session.MonitorsOff.Count}, unlocked={settings.KeepUnlocked}, efficiency={session.PreviousMode is not null}");
+                + $"standby={session.MonitorsOff.Count}, unlocked={settings.KeepUnlocked}, efficiency={session.PreviousMode is not null}, "
+            + $"hiddenTaskbar={session.HidTaskbar}");
             return true;
         }
         catch (Exception error) when (error is not ObjectDisposedException)
@@ -182,6 +187,7 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
                 Try(() => _platform.SetTopology(topology));
             if (recovery.Mode is { } mode && Try(_platform.Mode) == PowerMode.BestEfficiency)
                 Try(() => _platform.SetMode(mode));
+            if (recovery.HideTaskbar && Try(_platform.TaskbarAutoHide) == true) Try(() => _platform.SetTaskbarAutoHide(false));
             if (recovery.Monitors.Count > 0) await WakeAsync(recovery.Monitors).ConfigureAwait(false);
             Try(_platform.ClearRecovery);
         }
@@ -200,6 +206,8 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
             screen.DisplayTurnedOn -= OnDisplayTurnedOn;
             screen.Dispose();
         }).ConfigureAwait(false);
+        // Unless the user turned it off meanwhile.
+        if (session.HidTaskbar && Try(_platform.TaskbarAutoHide) == true) Try(() => _platform.SetTaskbarAutoHide(false));
         // The built-in panel first: it is the quickest to come back.
         if (session.PreviousTopology is { } topology && Try(_platform.Topology) == ProjectionTopology.External)
             Try(() => _platform.SetTopology(topology));
@@ -231,11 +239,20 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
         var displays = _platform.Displays();
         var lit = displays.Where(d => !dark.Contains(d.DeviceName)).ToArray();
         if (session.Settings.CoverDisplays) session.Screen?.Cover(lit);
-        // A still pointer would mark an OLED; leave it on a monitor in standby, or in a covered corner.
+        // The taskbar is topmost too and Windows raises it above other topmost windows, which would leave it
+        // lit on an OLED. Hiding it automatically, as its own setting does, keeps it off the cover.
+        if (session.Settings.CoverDisplays && lit.Length > 0 && !session.HidTaskbar && Try(_platform.TaskbarAutoHide) == false
+            && Try(() => _platform.SetTaskbarAutoHide(true)))
+        {
+            session.HidTaskbar = true;
+            if (session.Recovery is { } recovery) Try(() => _platform.SaveRecovery(session.Recovery = recovery with { HideTaskbar = true }));
+        }
+        // A still pointer would mark an OLED; leave it on a monitor in standby, or in a covered top corner,
+        // away from the bottom edge, which would reveal the hidden taskbar.
         if (displays.FirstOrDefault(d => dark.Contains(d.DeviceName)) is { } standby)
             _platform.ParkCursor((standby.Bounds.Left + standby.Bounds.Right) / 2, (standby.Bounds.Top + standby.Bounds.Bottom) / 2);
         else if (session.Settings.CoverDisplays && lit.Length > 0)
-            _platform.ParkCursor(lit[0].Bounds.Right - 1, lit[0].Bounds.Bottom - 1);
+            _platform.ParkCursor(lit[0].Bounds.Right - 1, lit[0].Bounds.Top);
     }
 
     private void OnPhysicalInput(object? sender, EventArgs e) => _ = StopAsync("local input");

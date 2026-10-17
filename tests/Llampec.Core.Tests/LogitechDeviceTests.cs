@@ -12,7 +12,7 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { DeviceUnitId = 0xA012C4F8 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
         Assert.Equal("A012C4F8", device.UnitId);
         Assert.Empty(transport.Mutations);
@@ -23,13 +23,13 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { UnifiedBattery = [70, 4, 0, 0] };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
         Assert.Equal(new LogitechBattery(70, null, false, false), device.Battery);
 
         var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         device.BatteryChanged += () => changed.TrySetResult();
         transport.NotifyBattery(71, 4, 1, 1);
-        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal(new LogitechBattery(71, null, true, false), device.Battery);
         Assert.Single(transport.Requests, request => request.Feature == 0x1004);
@@ -65,7 +65,7 @@ public class LogitechDeviceTests
         if (identity == "version0") transport.DeviceInfoVersionZero = true;
         if (identity == "unsupported") transport.DeviceInfoUnsupported = true;
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
         Assert.Null(device.UnitId);
         Assert.NotNull(device.Dpi);
@@ -78,13 +78,13 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { ControlId = 0x0056 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)0x0056, Assert.Single(device.Controls).Id);
         Assert.Equal((ushort)1000, Assert.IsType<LogitechDpiState>(device.Dpi).Current);
         Assert.Equal(new LogitechDpiRange(200, 8000, 50), device.Dpi.Range);
         Assert.Empty(transport.Mutations);
-        await Assert.ThrowsAsync<NotSupportedException>(() => device.DivertThumbAsync(_ => { }));
+        await Assert.ThrowsAsync<NotSupportedException>(() => device.DivertThumbAsync(_ => { }, ct: TestContext.Current.CancellationToken));
         Assert.Empty(transport.Mutations);
     }
 
@@ -97,10 +97,10 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport();
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
         int requestsBefore = transport.Requests.Count;
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => device.SetDpiAsync((ushort)dpi));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => device.SetDpiAsync((ushort)dpi, TestContext.Current.CancellationToken));
 
         Assert.Equal(requestsBefore, transport.Requests.Count);
         Assert.Empty(transport.Mutations);
@@ -112,13 +112,13 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { DpiValues = [400, 800, 1600] };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
         Assert.Null(device.Dpi!.Range);
         Assert.Equal(new ushort[] { 400, 800, 1600 }, device.Dpi.Values);
         Assert.True(device.Dpi.Supports(800));
         Assert.False(device.Dpi.Supports(1000));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => device.SetDpiAsync(1000));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => device.SetDpiAsync(1000, TestContext.Current.CancellationToken));
         Assert.Empty(transport.Mutations);
     }
 
@@ -127,9 +127,9 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { VerticalMode = 2 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await device.SetWheelInversionAsync(vertical: true, horizontal: true);
+        await device.SetWheelInversionAsync(vertical: true, horizontal: true, ct: TestContext.Current.CancellationToken);
         Assert.Equal((byte)6, transport.VerticalMode); // Keep high resolution, add inversion.
         Assert.True(transport.HorizontalInverted);
         Assert.Equal(new byte[] { 6 }, transport.Mutations.Single(r => r.Feature == 0x2121).Parameters[..1]);
@@ -138,14 +138,14 @@ public class LogitechDeviceTests
         // Simulate another owner changing routing and vertical resolution after our change.
         transport.VerticalMode = 5;
         transport.HorizontalReportingMode = 1;
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal((byte)1, transport.VerticalMode); // Restore only inversion; retain current routing/resolution.
         Assert.Equal((byte)1, transport.HorizontalReportingMode);
         Assert.False(transport.HorizontalInverted);
         Assert.Equal(new byte[] { 1, 0, 0 }, transport.Mutations.Last(r => r.Feature == 0x2150).Parameters[..3]);
         int count = transport.Mutations.Count;
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(count, transport.Mutations.Count);
     }
 
@@ -154,9 +154,9 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { HorizontalReportingMode = 1 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => device.SetWheelInversionAsync(true, true));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => device.SetWheelInversionAsync(true, true, TestContext.Current.CancellationToken));
 
         Assert.Empty(transport.Mutations);
         Assert.Equal((byte)2, transport.VerticalMode);
@@ -167,15 +167,15 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { ReportingFlags = 0x0200, MappedTo = 0x0056 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await device.DivertThumbAsync(_ => { });
+        await device.DivertThumbAsync(_ => { }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)0x0201, transport.ReportingFlags);
         Assert.Equal((ushort)0x0201, Assert.Single(device.Controls).ReportingFlags);
         Assert.Equal((ushort)0x0056, transport.MappedTo);
         Assert.Equal(new byte[] { 0, 0xC3, 3, 0, 0, 0 }, Assert.Single(transport.Mutations).Parameters[..6]);
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal((ushort)0x0200, transport.ReportingFlags);
         Assert.Equal((ushort)0x0200, Assert.Single(device.Controls).ReportingFlags);
         Assert.Equal((ushort)0x0056, transport.MappedTo);
@@ -187,14 +187,14 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { DroppedDpiSetReplies = 1 };
         await using var client = new HidppClient(transport, requestTimeout: TimeSpan.FromMilliseconds(150));
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => device.SetDpiAsync(1600));
+        await Assert.ThrowsAsync<TimeoutException>(() => device.SetDpiAsync(1600, TestContext.Current.CancellationToken));
 
         Assert.Equal(new ushort[] { 1600, 1000 }, transport.DpiWrites);
         Assert.Equal((ushort)1000, transport.Dpi);
         Assert.Equal((ushort)1000, device.Dpi!.Current);
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(2, transport.DpiWrites.Count);
     }
 
@@ -203,16 +203,16 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { DroppedDpiSetReplies = 2 };
         await using var client = new HidppClient(transport, requestTimeout: TimeSpan.FromMilliseconds(150));
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<AggregateException>(() => device.SetDpiAsync(1600));
+        await Assert.ThrowsAsync<AggregateException>(() => device.SetDpiAsync(1600, TestContext.Current.CancellationToken));
         Assert.Equal(new ushort[] { 1600, 1000 }, transport.DpiWrites);
 
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new ushort[] { 1600, 1000, 1000 }, transport.DpiWrites);
         Assert.Equal((ushort)1000, device.Dpi!.Current);
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(3, transport.DpiWrites.Count);
     }
 
@@ -221,11 +221,11 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport();
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await device.SetDpiAsync(1600);
-        await device.SetDpiAsync(2000);
-        await device.RestoreAsync();
+        await device.SetDpiAsync(1600, TestContext.Current.CancellationToken);
+        await device.SetDpiAsync(2000, TestContext.Current.CancellationToken);
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new ushort[] { 1600, 2000, 1000 }, transport.DpiWrites);
         Assert.Equal((ushort)1000, transport.Dpi);
@@ -238,17 +238,17 @@ public class LogitechDeviceTests
         transport.AdditionalControls.Add(0x0056, new(0x0100, 0x0052));
         var events = Channel.CreateUnbounded<(ushort Id, bool Down)>();
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await device.DivertThumbAsync(down => events.Writer.TryWrite((0x00C3, down)));
-        await device.DivertButtonAsync(0x0056, down => events.Writer.TryWrite((0x0056, down)));
+        await device.DivertThumbAsync(down => events.Writer.TryWrite((0x00C3, down)), ct: TestContext.Current.CancellationToken);
+        await device.DivertButtonAsync(0x0056, down => events.Writer.TryWrite((0x0056, down)), TestContext.Current.CancellationToken);
         transport.NotifyButtons(0x00C3, 0x0056);
         Assert.Equal(((ushort)0x00C3, true), await NextEvent(events));
         Assert.Equal(((ushort)0x0056, true), await NextEvent(events));
         transport.NotifyButtons(0x0056);
         Assert.Equal(((ushort)0x00C3, false), await NextEvent(events));
 
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(((ushort)0x0056, false), await NextEvent(events));
         Assert.False(events.Reader.TryRead(out _));
@@ -257,7 +257,7 @@ public class LogitechDeviceTests
         Assert.Equal(new FeatureDeviceTransport.ControlState(0x0100, 0x0052), transport.AdditionalControls[0x0056]);
         Assert.All(device.Controls, control => Assert.Equal(0, control.ReportingFlags & 1));
         int writes = transport.Mutations.Count;
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(writes, transport.Mutations.Count);
     }
 
@@ -266,12 +266,12 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { ReportingFlags = 1 };
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => device.DivertButtonAsync(0x00C3, _ => { }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => device.DivertButtonAsync(0x00C3, _ => { }, TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            device.CaptureRestoreStateAsync([0x00C3], false, false, false, false));
-        await device.RestoreAsync();
+            device.CaptureRestoreStateAsync([0x00C3], false, false, false, false, TestContext.Current.CancellationToken));
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(transport.Mutations);
         Assert.Equal((ushort)1, transport.ReportingFlags);
@@ -283,8 +283,8 @@ public class LogitechDeviceTests
         var transport = new FeatureDeviceTransport();
         transport.AdditionalControls.Add(0x0056, new(0x0200, 0x0052));
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
-        await device.DivertButtonAsync(0x00C3, _ => { });
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
+        await device.DivertButtonAsync(0x00C3, _ => { }, TestContext.Current.CancellationToken);
         using var cancellation = new CancellationTokenSource();
         transport.CancelAfterNextControlWrite = cancellation;
 
@@ -294,7 +294,7 @@ public class LogitechDeviceTests
         Assert.Equal((ushort)0, transport.ReportingFlags);
         Assert.Equal(new FeatureDeviceTransport.ControlState(0x0200, 0x0052), transport.AdditionalControls[0x0056]);
         Assert.Equal(4, transport.Mutations.Count); // Two diverts, two restores.
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(4, transport.Mutations.Count);
     }
 
@@ -304,8 +304,8 @@ public class LogitechDeviceTests
         var transport = new FeatureDeviceTransport { ReportingFlags = 0x0200, MappedTo = 0x0056 };
         transport.AdditionalControls.Add(0x0056, new(0x0100, 0x0052));
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
-        var captured = await device.CaptureRestoreStateAsync([0x00C3, 0x0056], true, true, true, true);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
+        var captured = await device.CaptureRestoreStateAsync([0x00C3, 0x0056], true, true, true, true, TestContext.Current.CancellationToken);
 
         Assert.Empty(transport.Mutations);
         Assert.Equal((ushort)1000, captured.Dpi);
@@ -327,8 +327,8 @@ public class LogitechDeviceTests
         };
         recoveredTransport.AdditionalControls.Add(0x0056, new(0x0101, 0x0052));
         await using var recoveredClient = new HidppClient(recoveredTransport);
-        var recoveredDevice = await LogitechDevice.CreateAsync(recoveredClient);
-        await recoveredDevice.ApplyRestoreStateAsync(persisted);
+        var recoveredDevice = await LogitechDevice.CreateAsync(recoveredClient, TestContext.Current.CancellationToken);
+        await recoveredDevice.ApplyRestoreStateAsync(persisted, TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)1000, recoveredTransport.Dpi);
         Assert.Equal((byte)2, recoveredTransport.SmartMode);
@@ -349,10 +349,10 @@ public class LogitechDeviceTests
         var transport = new FeatureDeviceTransport();
         transport.RemoveFeature(0x2150);
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
         var state = new LogitechRestoreState(1000, null, null, false, false, []);
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => device.ApplyRestoreStateAsync(state));
+        await Assert.ThrowsAsync<NotSupportedException>(() => device.ApplyRestoreStateAsync(state, TestContext.Current.CancellationToken));
 
         Assert.Empty(transport.Mutations);
     }
@@ -362,16 +362,16 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport { Dpi = 1600, DroppedDpiSetReplies = 1 };
         await using var client = new HidppClient(transport, requestTimeout: TimeSpan.FromMilliseconds(100));
-        await using var device = await LogitechDevice.CreateAsync(client);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
         var state = new LogitechRestoreState(1000, null, null, null, null, []);
 
-        await Assert.ThrowsAsync<AggregateException>(() => device.ApplyRestoreStateAsync(state));
-        await device.ApplyRestoreStateAsync(state);
+        await Assert.ThrowsAsync<AggregateException>(() => device.ApplyRestoreStateAsync(state, TestContext.Current.CancellationToken));
+        await device.ApplyRestoreStateAsync(state, TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)1000, transport.Dpi);
         Assert.All(transport.Mutations, request => Assert.Equal((ushort)0x2201, request.Feature));
         int writes = transport.Mutations.Count;
-        await device.RestoreAsync();
+        await device.RestoreAsync(TestContext.Current.CancellationToken);
         Assert.Equal(writes, transport.Mutations.Count);
     }
 
@@ -380,11 +380,11 @@ public class LogitechDeviceTests
     {
         var transport = new FeatureDeviceTransport();
         await using var client = new HidppClient(transport);
-        await using var device = await LogitechDevice.CreateAsync(client);
-        var baseline = await device.CaptureRestoreStateAsync([], true, false, false, false);
+        await using var device = await LogitechDevice.CreateAsync(client, TestContext.Current.CancellationToken);
+        var baseline = await device.CaptureRestoreStateAsync([], true, false, false, false, TestContext.Current.CancellationToken);
         transport.Dpi = 1200; // Changed externally after the durable snapshot was captured.
-        await device.SetDpiAsync(1600);
-        await device.ApplyRestoreStateAsync(baseline);
+        await device.SetDpiAsync(1600, TestContext.Current.CancellationToken);
+        await device.ApplyRestoreStateAsync(baseline, TestContext.Current.CancellationToken);
 
         Assert.Equal(new ushort[] { 1600, 1000 }, transport.DpiWrites);
         await device.DisposeAsync();

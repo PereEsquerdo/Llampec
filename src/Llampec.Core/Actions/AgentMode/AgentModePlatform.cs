@@ -6,7 +6,9 @@ using Llampec.Settings;
 namespace Llampec.Actions.AgentMode;
 
 /// <summary>What agent mode changed, saved before the changes so a later start can undo them after a crash.</summary>
-public sealed record AgentModeRecovery(int Version, ProjectionTopology? Topology, PowerMode? Mode, IReadOnlyList<string> Monitors);
+/// <param name="HideTaskbar">Auto-hide was turned on for the covers and must be turned off again.</param>
+public sealed record AgentModeRecovery(int Version, ProjectionTopology? Topology, PowerMode? Mode, IReadOnlyList<string> Monitors,
+    bool HideTaskbar = false);
 
 /// <summary>The Windows features agent mode combines. Screen methods are called on the UI thread.</summary>
 public interface IAgentModePlatform
@@ -22,6 +24,9 @@ public interface IAgentModePlatform
     Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> monitors, bool on);
     IAgentScreen CreateScreen();
     void ParkCursor(int x, int y);
+    /// <summary>Whether the taskbar hides automatically; null with the tablet taskbar, which ignores it.</summary>
+    bool? TaskbarAutoHide();
+    void SetTaskbarAutoHide(bool hide);
     AgentModeRecovery? LoadRecovery();
     void SaveRecovery(AgentModeRecovery recovery);
     void ClearRecovery();
@@ -57,6 +62,15 @@ public sealed class AgentModePlatform(ExternalMonitorService monitors) : IAgentM
     public Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> targets, bool on) => monitors.SetPowerAsync(targets, on);
     public IAgentScreen CreateScreen() => new AgentScreen(TimeSpan.FromSeconds(1));
     public void ParkCursor(int x, int y) => SetCursorPos(x, y);
+
+    public bool? TaskbarAutoHide() => TabletTaskbar.ReadMode() == TaskbarMode.Normal
+        ? (Actions.Taskbar.TaskbarAutoHideAction.GetState() & Interop.Shell32.ABS_AUTOHIDE) != 0 : null;
+
+    public void SetTaskbarAutoHide(bool hide)
+    {
+        uint state = Actions.Taskbar.TaskbarAutoHideAction.GetState();
+        Actions.Taskbar.TaskbarAutoHideAction.SetState(hide ? state | Interop.Shell32.ABS_AUTOHIDE : state & ~Interop.Shell32.ABS_AUTOHIDE);
+    }
 
     public AgentModeRecovery? LoadRecovery()
     {

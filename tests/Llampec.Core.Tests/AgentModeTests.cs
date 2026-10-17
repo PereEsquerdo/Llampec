@@ -117,6 +117,10 @@ public sealed class AgentModeTests
         }
         public IAgentScreen CreateScreen() { Log.Add("screen"); return Screen = new FakeScreen(); }
         public void ParkCursor(int x, int y) => Cursor = (x, y);
+        /// <summary>Null stands for the tablet taskbar, which ignores auto-hide.</summary>
+        public bool? AutoHide = false;
+        public bool? TaskbarAutoHide() => AutoHide;
+        public void SetTaskbarAutoHide(bool hide) { Log.Add(hide ? "autohide true" : "autohide false"); AutoHide = hide; }
         public AgentModeRecovery? LoadRecovery() => Recovery;
         public void SaveRecovery(AgentModeRecovery recovery) => Recovery = recovery;
         public void ClearRecovery() => Recovery = null;
@@ -157,7 +161,7 @@ public sealed class AgentModeTests
         platform.Log.Clear();
 
         platform.Screen!.Input();
-        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.False(mode.IsActive);
         Assert.True(platform.Screen.Disposed);
@@ -177,7 +181,9 @@ public sealed class AgentModeTests
 
         Assert.Equal(ProjectionTopology.Extend, platform.Current);
         Assert.Equal([@"\\.\DISPLAY1"], platform.Screen!.Covered);
-        Assert.Equal((1999, 999), platform.Cursor); // bottom-right pixel: the pointer is almost entirely off screen
+        // Top-right pixel: the pointer is almost entirely off screen, away from the hidden taskbar's edge.
+        Assert.Equal((1999, 0), platform.Cursor);
+        Assert.True(platform.AutoHide);
         await mode.StopAsync("test");
         Assert.True(platform.RequestReleased);
     }
@@ -193,7 +199,7 @@ public sealed class AgentModeTests
         var ended = new TaskCompletionSource();
         mode.Ended += (_, _) => ended.TrySetResult();
         platform.Screen!.Wake();
-        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.False(mode.IsActive);
     }
 
@@ -295,6 +301,59 @@ public sealed class AgentModeTests
         Assert.Equal("Could not activate agentic work.", mode.Subtitle);
     }
 
+    [Fact]
+    public async Task CoveredDisplayHidesTheTaskbarAndRestoresIt()
+    {
+        var platform = new FakePlatform().WithDisplays(builtIn: true);
+        using var mode = Mode(platform);
+        await mode.StartAsync();
+        Assert.True(platform.AutoHide);
+        Assert.True(platform.Recovery!.HideTaskbar);
+
+        await mode.StopAsync("test");
+
+        Assert.False(platform.AutoHide);
+        Assert.Contains("autohide false", platform.Log);
+    }
+
+    [Fact]
+    public async Task TaskbarThatAlreadyHidOrUsesTabletModeIsLeftAlone()
+    {
+        foreach (bool? before in new bool?[] { true, null })
+        {
+            var platform = new FakePlatform().WithDisplays(builtIn: true);
+            platform.AutoHide = before;
+            using var mode = Mode(platform);
+            await mode.StartAsync();
+            await mode.StopAsync("test");
+            Assert.Equal(before, platform.AutoHide);
+            Assert.DoesNotContain(platform.Log, entry => entry.StartsWith("autohide", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task UserWhoTurnsAutoHideOffMeanwhileKeepsIt()
+    {
+        var platform = new FakePlatform().WithDisplays(builtIn: true);
+        using var mode = Mode(platform);
+        await mode.StartAsync();
+        platform.AutoHide = false; // from Settings or the Auto-hide taskbar button
+        await mode.StopAsync("test");
+        Assert.DoesNotContain("autohide false", platform.Log);
+    }
+
+    [Fact]
+    public async Task RecoveryShowsTheTaskbarAgain()
+    {
+        var platform = new FakePlatform().WithDisplays(builtIn: true);
+        platform.AutoHide = true;
+        platform.Recovery = new(1, null, null, [], HideTaskbar: true);
+        using var mode = Mode(platform);
+        await mode.RecoverAsync();
+        Assert.False(platform.AutoHide);
+        Assert.Null(platform.Recovery);
+    }
+
     private sealed class ThrowingPlatform : IAgentModePlatform
     {
         public IDisposable KeepAwake(bool keepDisplayOn) => throw new System.ComponentModel.Win32Exception(5);
@@ -307,6 +366,8 @@ public sealed class AgentModeTests
         public Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> monitors, bool on) => Task.FromResult<IReadOnlyList<DdcMonitor>>([]);
         public IAgentScreen CreateScreen() => throw new NotSupportedException();
         public void ParkCursor(int x, int y) { }
+        public bool? TaskbarAutoHide() => null;
+        public void SetTaskbarAutoHide(bool hide) => throw new NotSupportedException();
         public AgentModeRecovery? LoadRecovery() => null;
         public void SaveRecovery(AgentModeRecovery recovery) { }
         public void ClearRecovery() { }
@@ -354,11 +415,11 @@ public sealed class ExternalMonitorTests
         ddc.WriteGate = new TaskCompletionSource();
 
         service.Set(monitor, MonitorFeature.Brightness, 10);
-        await Task.Delay(50); // the first write is now blocked on the bus
+        await Task.Delay(50, TestContext.Current.CancellationToken); // the first write is now blocked on the bus
         for (uint value = 11; value <= 30; value++) service.Set(monitor, MonitorFeature.Brightness, value);
         Assert.Equal(30u, service.Monitors[0].Brightness!.Value.Current); // shown at once
         ddc.WriteGate.SetResult();
-        for (int i = 0; i < 100 && ddc.Values[(monitor.Key, MonitorFeature.Brightness)] != 30; i++) await Task.Delay(10);
+        for (int i = 0; i < 100 && ddc.Values[(monitor.Key, MonitorFeature.Brightness)] != 30; i++) await Task.Delay(10, TestContext.Current.CancellationToken);
 
         lock (ddc.Writes) Assert.Equal([10u, 30u], ddc.Writes.Select(write => write.Value));
     }

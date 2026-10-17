@@ -16,15 +16,15 @@ public class HidppClientTests
         var notification = new TaskCompletionSource<HidppNotification>(TaskCreationOptions.RunContinuationsAsynchronously);
         client.NotificationReceived += value => notification.TrySetResult(value);
 
-        Task<byte[]> pending = client.RequestAsync(0x07, 2, new byte[] { 0xAB });
+        Task<byte[]> pending = client.RequestAsync(0x07, 2, new byte[] { 0xAB }, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         Assert.Equal(new byte[] { 0xFF, 0x07, 0x21, 0xAB, 0, 0 }, write[1..7]);
 
         transport.Receive(Report(0x10, 0xFF, 0x09, 0x30, 0xC3, 0x00, 0x56));
         transport.Receive(Reply(write, 0x12, 0x34, 0x56));
 
-        Assert.Equal(new byte[] { 0x12, 0x34, 0x56 }, await pending.WaitAsync(TestDeadline));
-        HidppNotification observed = await notification.Task.WaitAsync(TestDeadline);
+        Assert.Equal(new byte[] { 0x12, 0x34, 0x56 }, await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
+        HidppNotification observed = await notification.Task.WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
         Assert.Equal((byte)0xFF, observed.DeviceIndex);
         Assert.Equal((byte)0x09, observed.FeatureIndex);
         Assert.Equal((byte)3, observed.Function);
@@ -39,7 +39,7 @@ public class HidppClientTests
         var fence = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         client.NotificationReceived += _ => fence.TrySetResult();
 
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         transport.Receive(Report(0x10, 3, 7, write[3], 1, 2, 3)); // Another receiver slot.
         transport.Receive(Report(0x10, 2, 7, 0x22, 1, 2, 3)); // Another software ID.
@@ -50,10 +50,10 @@ public class HidppClientTests
         transport.Receive([0x12, 2, 7, write[3], 1, 2, 3]); // Unknown report ID.
         transport.Receive(Report(0x10, 2, 9, 0)); // A notification proves earlier input was processed.
 
-        await fence.Task.WaitAsync(TestDeadline);
+        await fence.Task.WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
         Assert.False(pending.IsCompleted);
         transport.Receive(Reply(write, 4, 5, 6));
-        Assert.Equal(new byte[] { 4, 5, 6 }, await pending.WaitAsync(TestDeadline));
+        Assert.Equal(new byte[] { 4, 5, 6 }, await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -61,17 +61,17 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> first = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> first = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] firstWrite = await transport.NextWriteAsync();
-        Task<byte[]> second = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> second = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         Assert.False(transport.TryReadWrite(out _));
 
         transport.Receive(Reply(firstWrite, 1));
-        Assert.Equal((byte)1, (await first.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)1, (await first.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
         byte[] secondWrite = await transport.NextWriteAsync();
         Assert.NotEqual(firstWrite[3], secondWrite[3]);
         transport.Receive(Reply(secondWrite, 2));
-        Assert.Equal((byte)2, (await second.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)2, (await second.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class HidppClientTests
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
         byte[] parameters = Enumerable.Range(1, 16).Select(value => (byte)value).ToArray();
-        Task<byte[]> pending = client.RequestAsync(7, 2, parameters);
+        Task<byte[]> pending = client.RequestAsync(7, 2, parameters, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         Assert.Equal((byte)0x11, write[0]);
         Assert.Equal(parameters, write[4..20]);
@@ -89,7 +89,7 @@ public class HidppClientTests
         padded[19] = 0xEE;
         transport.Receive(padded);
 
-        Assert.Equal(new byte[] { 1, 2, 3 }, await pending.WaitAsync(TestDeadline));
+        Assert.Equal(new byte[] { 1, 2, 3 }, await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -97,12 +97,12 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         byte[] parameters = Enumerable.Range(1, 16).Select(value => (byte)value).ToArray();
         transport.Receive(Report(0x11, write[1], write[2], write[3], parameters));
 
-        Assert.Equal(parameters, await pending.WaitAsync(TestDeadline));
+        Assert.Equal(parameters, await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -113,13 +113,13 @@ public class HidppClientTests
         var notification = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         client.NotificationReceived += _ => throw new InvalidOperationException("Consumer failure.");
         client.NotificationReceived += _ => notification.TrySetResult();
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         transport.Receive(Report(0x10, write[1], 9, 0));
         transport.Receive(Reply(write, 0x42));
 
-        Assert.Equal((byte)0x42, (await pending.WaitAsync(TestDeadline))[0]);
-        await notification.Task.WaitAsync(TestDeadline);
+        Assert.Equal((byte)0x42, (await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
+        await notification.Task.WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -129,11 +129,11 @@ public class HidppClientTests
         await using var client = new HidppClient(transport);
         for (int request = 0; request < 16; request++)
         {
-            Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+            Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
             byte[] write = await transport.NextWriteAsync();
             Assert.Equal(request % 15 + 1, write[3] & 0x0F);
             transport.Receive(Reply(write, (byte)request));
-            Assert.Equal((byte)request, (await pending.WaitAsync(TestDeadline))[0]);
+            Assert.Equal((byte)request, (await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
         }
     }
 
@@ -144,17 +144,17 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         transport.Receive(Report(0x10, write[1], (byte)errorReportFeature, write[2], write[3], 0x09, 0));
 
-        HidppException error = await Assert.ThrowsAsync<HidppException>(() => pending.WaitAsync(TestDeadline));
+        HidppException error = await Assert.ThrowsAsync<HidppException>(() => pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
         Assert.Equal((byte)0x09, error.ErrorCode);
 
-        Task<byte[]> next = client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> next = client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] nextWrite = await transport.NextWriteAsync();
         transport.Receive(Reply(nextWrite, 0x42));
-        Assert.Equal((byte)0x42, (await next.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)0x42, (await next.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
     }
 
     [Fact]
@@ -162,15 +162,15 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport, requestTimeout: TimeSpan.FromMilliseconds(200));
-        Task<byte[]> timedOut = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> timedOut = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] oldWrite = await transport.NextWriteAsync();
-        await Assert.ThrowsAsync<TimeoutException>(() => timedOut.WaitAsync(TestDeadline));
+        await Assert.ThrowsAsync<TimeoutException>(() => timedOut.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
 
-        Task<byte[]> next = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> next = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] nextWrite = await transport.NextWriteAsync();
         transport.Receive(Reply(oldWrite, 0x11));
         transport.Receive(Reply(nextWrite, 0x22));
-        Assert.Equal((byte)0x22, (await next.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)0x22, (await next.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
     }
 
     [Fact]
@@ -182,13 +182,13 @@ public class HidppClientTests
         Task<byte[]> cancelled = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, cancellation.Token);
         byte[] oldWrite = await transport.NextWriteAsync();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.WaitAsync(TestDeadline));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
 
-        Task<byte[]> next = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> next = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] nextWrite = await transport.NextWriteAsync();
         transport.Receive(Reply(oldWrite, 0x11));
         transport.Receive(Reply(nextWrite, 0x22));
-        Assert.Equal((byte)0x22, (await next.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)0x22, (await next.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
     }
 
     [Fact]
@@ -200,18 +200,18 @@ public class HidppClientTests
         Task<byte[]> interrupted = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, cancellation.Token);
         byte[] oldWrite = await transport.NextWriteAsync();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted.WaitAsync(TestDeadline));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
 
         // Enough successful exchanges to wrap the 4-bit counter. A delayed old
         // response must never match one of these requests, despite identical feature/function.
         for (int request = 0; request < 30; request++)
         {
-            Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+            Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
             byte[] write = await transport.NextWriteAsync();
             Assert.NotEqual(oldWrite[3], write[3]);
             transport.Receive(Reply(oldWrite, 0xAA));
             transport.Receive(Reply(write, 0xBB));
-            Assert.Equal((byte)0xBB, (await pending.WaitAsync(TestDeadline))[0]);
+            Assert.Equal((byte)0xBB, (await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
         }
     }
 
@@ -226,10 +226,10 @@ public class HidppClientTests
             Task<byte[]> interrupted = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, cancellation.Token);
             await transport.NextWriteAsync();
             cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted.WaitAsync(TestDeadline));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => interrupted.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
         }
 
-        await Assert.ThrowsAsync<IOException>(() => client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty));
+        await Assert.ThrowsAsync<IOException>(() => client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
         Assert.False(transport.TryReadWrite(out _));
     }
 
@@ -241,11 +241,11 @@ public class HidppClientTests
         int lost = 0;
         client.ConnectionLost += _ => Interlocked.Increment(ref lost);
         // A completed request proves the reader is active before it is cancelled.
-        Task<byte[]> request = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> request = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         transport.Receive(Reply(await transport.NextWriteAsync(), 0x42));
-        await request.WaitAsync(TestDeadline);
+        await request.WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
 
-        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline);
+        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, lost);
         Assert.Null(client.ConnectionError);
@@ -256,17 +256,17 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> active = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> active = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         using var cancellation = new CancellationTokenSource();
         Task<byte[]> queued = client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty, cancellation.Token);
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued.WaitAsync(TestDeadline));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
         Assert.False(transport.TryReadWrite(out _));
         Assert.False(active.IsCompleted);
 
         transport.Receive(Reply(write, 0x42));
-        Assert.Equal((byte)0x42, (await active.WaitAsync(TestDeadline))[0]);
+        Assert.Equal((byte)0x42, (await active.WaitAsync(TestDeadline, TestContext.Current.CancellationToken))[0]);
         Assert.False(transport.TryReadWrite(out _));
     }
 
@@ -275,12 +275,12 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         await transport.NextWriteAsync();
         transport.FailRead(new IOException("Receiver disconnected."));
 
-        await Assert.ThrowsAnyAsync<IOException>(() => pending.WaitAsync(TestDeadline));
-        await Assert.ThrowsAnyAsync<IOException>(() => client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty).WaitAsync(TestDeadline));
+        await Assert.ThrowsAnyAsync<IOException>(() => pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAnyAsync<IOException>(() => client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken).WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
         Assert.False(transport.TryReadWrite(out _));
     }
 
@@ -289,11 +289,11 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         await transport.NextWriteAsync();
         transport.Receive([]);
 
-        await Assert.ThrowsAnyAsync<IOException>(() => pending.WaitAsync(TestDeadline));
+        await Assert.ThrowsAnyAsync<IOException>(() => pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -301,18 +301,18 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         var client = new HidppClient(transport);
-        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> pending = client.RequestAsync(7, 2, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
         await transport.NextWriteAsync();
-        Task<byte[]> queued = client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty);
+        Task<byte[]> queued = client.RequestAsync(8, 0, ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken);
 
-        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline);
+        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
         Assert.True(transport.IsDisposed);
-        Exception? pendingError = await Record.ExceptionAsync(() => pending.WaitAsync(TestDeadline));
-        Exception? queuedError = await Record.ExceptionAsync(() => queued.WaitAsync(TestDeadline));
+        Exception? pendingError = await Record.ExceptionAsync(() => pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
+        Exception? queuedError = await Record.ExceptionAsync(() => queued.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
         Assert.True(pendingError is ObjectDisposedException or OperationCanceledException, pendingError?.ToString());
         Assert.True(queuedError is ObjectDisposedException or OperationCanceledException, queuedError?.ToString());
         Assert.False(transport.TryReadWrite(out _));
-        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline);
+        await client.DisposeAsync().AsTask().WaitAsync(TestDeadline, TestContext.Current.CancellationToken);
     }
 
     [Theory]
@@ -322,12 +322,12 @@ public class HidppClientTests
     {
         var transport = new FakeTransport();
         await using var client = new HidppClient(transport);
-        Task<byte?> pending = client.FindFeatureAsync(0x2201);
+        Task<byte?> pending = client.FindFeatureAsync(0x2201, TestContext.Current.CancellationToken);
         byte[] write = await transport.NextWriteAsync();
         Assert.Equal(new byte[] { 0xFF, 0, 1, 0x22, 0x01, 0 }, write[1..7]);
         transport.Receive(Reply(write, (byte)index));
 
-        Assert.Equal(expected is { } value ? (byte?)value : null, await pending.WaitAsync(TestDeadline));
+        Assert.Equal(expected is { } value ? (byte?)value : null, await pending.WaitAsync(TestDeadline, TestContext.Current.CancellationToken));
     }
 
     private static byte[] Reply(byte[] request, params byte[] parameters) =>

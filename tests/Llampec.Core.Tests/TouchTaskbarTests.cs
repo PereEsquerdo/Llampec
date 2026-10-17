@@ -96,10 +96,10 @@ public sealed class TouchTaskbarTests
         });
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.Off, action.State);
         Assert.Null(action.Subtitle);
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.On, action.State);
         Assert.Equal(new[] { false, true }, writes);
     }
@@ -118,7 +118,7 @@ public sealed class TouchTaskbarTests
         action.Refresh();
         enabled = false;
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.True(requested);
         Assert.Equal(ActionState.On, action.State);
@@ -137,7 +137,7 @@ public sealed class TouchTaskbarTests
         action.Refresh();
         status = status with { IsAvailable = false, UnavailableReason = "Touch taskbar unavailable" };
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(0, writes);
         Assert.False(action.IsAvailable);
@@ -153,7 +153,7 @@ public sealed class TouchTaskbarTests
             Task.FromResult(new TouchTaskbarChangeResult(reportedSuccess)));
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         action.Refresh(); // QuickActionBase and system event refreshes must not immediately erase errors.
 
         Assert.Equal(ActionState.On, action.State);
@@ -171,7 +171,7 @@ public sealed class TouchTaskbarTests
         });
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(ActionState.Off, action.State);
         Assert.Equal("Touch taskbar saved; Windows refresh unconfirmed.", action.Subtitle);
         enabled = true;
@@ -193,10 +193,10 @@ public sealed class TouchTaskbarTests
         });
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Could not change touch taskbar.", action.Subtitle);
         Assert.True(action.IsAvailable);
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ActionState.Off, action.State);
         Assert.Null(action.Subtitle);

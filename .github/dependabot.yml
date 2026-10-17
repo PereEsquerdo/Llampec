@@ -1,0 +1,20 @@
+# Keeps the CI actions and NuGet packages current: Dependabot opens one pull request per
+# group each week, which CI then builds and tests.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      windows-app-sdk:
+        patterns: ["Microsoft.WindowsAppSDK*"]
+      tests:
+        patterns: ["Microsoft.NET.Test.Sdk", "xunit*"]

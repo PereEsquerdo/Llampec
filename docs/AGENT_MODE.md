@@ -40,8 +40,21 @@ Llampec restores everything at the sign-in screen.
   computer-use agents and remote tools see and click the desktop beneath
   (`WS_EX_LAYERED | WS_EX_TRANSPARENT`). Covers are re-raised on each foreground
   change. Shell flyouts and notifications can still appear briefly above them.
+- **Taskbar.** The taskbar is topmost too, and Windows raises it above other topmost
+  windows; no ordinary app can stay above it. The user found it left lit over the
+  cover on 2026-10-17, as bad for an OLED as no cover at all. While a cover is shown,
+  agent mode therefore turns on **Automatically hide the taskbar** (the same
+  `ABM_SETSTATE` as the Auto-hide taskbar button) and turns it off again on exit,
+  unless it was already on or the user turned it off meanwhile. The tablet taskbar
+  ignores that setting and is left alone. The change is in the recovery record.
 - **Pointer.** A still pointer marks an OLED. It is parked on a monitor in standby,
-  or in the bottom-right pixel of a covered display.
+  or in the top-right pixel of a covered display, away from the bottom edge that
+  would reveal the hidden taskbar.
+- **A single built-in display.** It cannot be switched off while Windows keeps the
+  session awake: Windows needs one active display, and turning the screen off on
+  demand enters standby (see [caffeine](CAFFEINE.md)). Agent mode covers it with
+  black instead. For a screen that is really off, turn off **Keep the session
+  unlocked**: Windows then turns it off after its timeout, and locks the session.
 - **Unplugging.** If the external monitor disappears, Windows lights the built-in
   panel again; agent mode covers it.
 - **Recovery.** What will change is saved in `agent-mode-recovery.json` before
@@ -72,9 +85,16 @@ leaving no recovery file. A cover was confirmed excluded from capture (average
 luminance 70.6 vs 71.1 without it) and injected keyboard and mouse input produced
 no physical-input events.
 
-Not yet verified by hand: exit by physical key, click, touch and touchpad; the
-locking variant (display off by timeout, then wake at the sign-in screen); a single
-built-in display covered for a long run; consumption on battery.
+Checked by hand on 2026-10-17: a physical key, click, touch and touchpad each end
+the mode. The Philips' own power button is no way out of its DDC/CI standby: it
+switches the monitor off and on, but it stays without a signal until Llampec wakes
+it. With only the built-in display, the taskbar showed above the cover; it is now
+hidden automatically (an end-to-end run turned auto-hide on and back off, with all
+twelve visible windows in place and no recovery file left).
+
+Not yet verified by hand: the locking variant (display off by timeout, then wake at
+the sign-in screen); a single built-in display covered for a long run; consumption
+on battery.
 
 ## Remote access on Windows 11 Home
 

@@ -21,14 +21,14 @@ public sealed class TaskbarAutoHideTests
             value => { writes.Add(value); flags = value; });
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(initial ^ Shell32.ABS_AUTOHIDE, Assert.Single(writes));
         Assert.Equal((flags & Shell32.ABS_AUTOHIDE) != 0 ? ActionState.On : ActionState.Off, action.State);
         Assert.True(action.IsAvailable);
         Assert.Null(action.Subtitle);
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
         Assert.Equal(initial, flags);
         Assert.Equal(2, writes.Count);
     }
@@ -41,7 +41,7 @@ public sealed class TaskbarAutoHideTests
             value => requested = value);
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(Shell32.ABS_ALWAYSONTOP | Shell32.ABS_AUTOHIDE, requested);
         Assert.Equal(ActionState.Off, action.State);
@@ -56,7 +56,7 @@ public sealed class TaskbarAutoHideTests
         var action = new TaskbarAutoHideAction(() => mode, () => Shell32.ABS_AUTOHIDE, _ => writes++);
         action.Refresh();
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.False(action.IsAvailable);
         Assert.Equal(reason, action.Subtitle);
@@ -76,7 +76,7 @@ public sealed class TaskbarAutoHideTests
         Assert.True(action.IsAvailable);
         mode = nextMode;
 
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(0, writes);
         Assert.False(action.IsAvailable);
@@ -98,7 +98,7 @@ public sealed class TaskbarAutoHideTests
         Assert.Null(action.Subtitle);
         // Another application changes the native preference after our last refresh.
         flags = Shell32.ABS_AUTOHIDE | Shell32.ABS_ALWAYSONTOP;
-        await action.ExecuteAsync(default);
+        await action.ExecuteAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(Shell32.ABS_ALWAYSONTOP, flags);
         Assert.Equal(ActionState.Off, action.State);

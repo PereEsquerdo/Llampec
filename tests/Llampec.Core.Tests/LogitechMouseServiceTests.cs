@@ -20,7 +20,7 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(new());
+        await service.ApplyAsync(new(), TestContext.Current.CancellationToken);
 
         Assert.Equal(LogitechMouseConnectionState.Disabled, service.Status.State);
         Assert.Empty(backend.OpenedIdentities);
@@ -35,7 +35,7 @@ public class LogitechMouseServiceTests
         var backend = new Backend(); var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store);
         var preferences = Enabled();
-        await service.ApplyAsync(preferences);
+        await service.ApplyAsync(preferences, TestContext.Current.CancellationToken);
         preferences.ButtonShortcuts.Clear(); // Caller cannot mutate the active copy.
 
         Assert.True(service.Status.Connected);
@@ -44,7 +44,7 @@ public class LogitechMouseServiceTests
         Assert.NotNull(store.Journal);
         Assert.True(backend.Log.IndexOf("save:1000") < backend.Log.IndexOf("apply:1600"));
         Assert.Single(Assert.Single(backend.Sessions).Bindings);
-        await service.ApplyAsync(new());
+        await service.ApplyAsync(new(), TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)1000, backend.HardwareDpi);
         Assert.Null(store.Journal);
@@ -57,8 +57,8 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store);
-        await service.ApplyAsync(Enabled(1600));
-        await service.ApplyAsync(Enabled(2000));
+        await service.ApplyAsync(Enabled(1600), TestContext.Current.CancellationToken);
+        await service.ApplyAsync(Enabled(2000), TestContext.Current.CancellationToken);
 
         Assert.Equal((ushort)2000, backend.HardwareDpi);
         Assert.Equal((ushort)1000, store.Journal!.State.Dpi);
@@ -72,7 +72,7 @@ public class LogitechMouseServiceTests
         var backend = new Backend(); var store = new Store(backend.Log) { SaveError = new UnauthorizedAccessException("Read only.") };
         await using var service = new LogitechMouseService(_ => { }, backend, store);
 
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
 
         Assert.Equal(LogitechMouseConnectionState.Error, service.Status.State);
         Assert.DoesNotContain(backend.Log, entry => entry.StartsWith("apply:", StringComparison.Ordinal));
@@ -85,7 +85,7 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         var lostSession = backend.Sessions[0];
         lostSession.RestoreError = new IOException("Disconnected.");
         backend.Available = false;
@@ -111,7 +111,7 @@ public class LogitechMouseServiceTests
         var store = new Store(backend.Log) { Journal = Journal() };
         var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(new());
+        await service.ApplyAsync(new(), TestContext.Current.CancellationToken);
         Assert.True(service.Status.RecoveryPending);
         Assert.Empty(time.ActiveTimers);
         backend.Available = true;
@@ -135,7 +135,7 @@ public class LogitechMouseServiceTests
         };
         await using var service = new LogitechMouseService(_ => { }, backend, store);
 
-        await service.ApplyAsync(new());
+        await service.ApplyAsync(new(), TestContext.Current.CancellationToken);
 
         Assert.True(service.Status.RecoveryPending);
         Assert.NotNull(store.Journal);
@@ -148,16 +148,16 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend { Available = false }; var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         Assert.Equal(TimeSpan.FromSeconds(2), Assert.Single(time.ActiveTimers).Delay);
         await backend.NextOpenAsync();
         time.Advance(TimeSpan.FromSeconds(2));
         await backend.NextOpenAsync();
-        await service.ScanAsync();
+        await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.Equal(TimeSpan.FromSeconds(5), Assert.Single(time.ActiveTimers).Delay);
         time.Advance(TimeSpan.FromSeconds(5));
         await backend.NextOpenAsync();
-        await service.ScanAsync();
+        await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.Equal(TimeSpan.FromSeconds(15), Assert.Single(time.ActiveTimers).Delay);
         backend.Available = true;
         time.Advance(TimeSpan.FromSeconds(15));
@@ -166,7 +166,7 @@ public class LogitechMouseServiceTests
         Assert.Empty(time.ActiveTimers);
         Assert.Equal(4, backend.OpenedIdentities.Count);
         time.Advance(TimeSpan.FromHours(1));
-        await service.ScanAsync();
+        await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.Equal(4, backend.OpenedIdentities.Count);
     }
 
@@ -175,14 +175,14 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend { Available = false }; var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         await backend.NextOpenAsync();
         foreach (int seconds in new[] { 2, 5, 15 })
         {
             Assert.Equal(TimeSpan.FromSeconds(seconds), Assert.Single(time.ActiveTimers).Delay);
             time.Advance(TimeSpan.FromSeconds(seconds));
             await backend.NextOpenAsync();
-            await service.ScanAsync();
+            await service.ScanAsync(TestContext.Current.CancellationToken);
         }
         Assert.Empty(time.ActiveTimers);
         time.Advance(TimeSpan.FromHours(1));
@@ -193,7 +193,7 @@ public class LogitechMouseServiceTests
         await backend.NextOpenAsync();
         await WaitForAsync(service, status => status.Connected);
         service.RetryIfDisconnected(); // connected: nothing to do
-        await service.ScanAsync();
+        await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.Equal(5, backend.OpenedIdentities.Count);
     }
 
@@ -205,7 +205,7 @@ public class LogitechMouseServiceTests
         var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
 
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
 
         Assert.NotEqual(LogitechMouseConnectionState.Error, service.Status.State);
         Assert.Equal(TimeSpan.FromSeconds(2), Assert.Single(time.ActiveTimers).Delay);
@@ -217,7 +217,7 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store, new ManualTime());
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         await backend.NextOpenAsync();
         var first = Assert.Single(backend.Sessions);
 
@@ -238,7 +238,7 @@ public class LogitechMouseServiceTests
         var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
 
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
 
         Assert.Equal(LogitechMouseConnectionState.Error, service.Status.State);
         Assert.Empty(time.ActiveTimers);
@@ -251,7 +251,7 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
 
         service.Suspend();
         await WaitForAsync(service, status => status.State == LogitechMouseConnectionState.Suspended);
@@ -276,12 +276,12 @@ public class LogitechMouseServiceTests
             release.Wait(Deadline);
             shortcuts.Enqueue(text);
         }, backend, store);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         backend.Sessions[0].Press(0xC3);
-        await started.Task.WaitAsync(Deadline);
+        await started.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
         backend.Sessions[0].Press(0xC3);
 
-        try { await service.ApplyAsync(new()).WaitAsync(Deadline); }
+        try { await service.ApplyAsync(new(), TestContext.Current.CancellationToken).WaitAsync(Deadline, TestContext.Current.CancellationToken); }
         finally { release.Set(); }
         await service.StopAsync();
 
@@ -295,16 +295,16 @@ public class LogitechMouseServiceTests
         var backend = new Backend(); var store = new Store(backend.Log);
         var shortcut = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var service = new LogitechMouseService(text => shortcut.TrySetResult(text), backend, store);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         backend.ScanBlock = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task scan = service.ScanAsync();
-        await backend.ScanStarted.Task.WaitAsync(Deadline);
+        Task scan = service.ScanAsync(TestContext.Current.CancellationToken);
+        await backend.ScanStarted.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
 
         backend.Sessions[0].Press(0xC3);
 
         try
         {
-            Assert.Equal("Win+Tab", await shortcut.Task.WaitAsync(Deadline));
+            Assert.Equal("Win+Tab", await shortcut.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken));
             Assert.False(scan.IsCompleted);
         }
         finally { backend.ScanBlock.SetResult(); }
@@ -328,15 +328,15 @@ public class LogitechMouseServiceTests
         }, backend, store, time);
         var settings = Enabled();
         settings.ButtonShortcuts[0x53] = "Ctrl+C";
-        await service.ApplyAsync(settings);
+        await service.ApplyAsync(settings, TestContext.Current.CancellationToken);
         backend.Sessions[0].Press(0xC3);
-        await started.Task.WaitAsync(Deadline);
+        await started.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
         backend.Sessions[0].Press(0xC3);
         time.Advance(TimeSpan.FromSeconds(1));
         backend.Sessions[0].Press(0x53);
 
         release.Set();
-        await fresh.Task.WaitAsync(Deadline);
+        await fresh.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "Win+Tab", "Ctrl+C" }, output);
     }
@@ -347,10 +347,10 @@ public class LogitechMouseServiceTests
         var backend = new Backend { ScanHonorsCancellation = false }; var store = new Store(backend.Log);
         var shortcut = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var service = new LogitechMouseService(text => shortcut.TrySetResult(text), backend, store);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         backend.ScanBlock = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task scan = service.ScanAsync();
-        await backend.ScanStarted.Task.WaitAsync(Deadline);
+        Task scan = service.ScanAsync(TestContext.Current.CancellationToken);
+        await backend.ScanStarted.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
         using var cancellation = new CancellationTokenSource();
         Task apply = service.ApplyAsync(Enabled(2000), cancellation.Token);
         cancellation.Cancel();
@@ -360,7 +360,7 @@ public class LogitechMouseServiceTests
 
         backend.Sessions[0].Press(0xC3);
 
-        Assert.Equal("Win+Tab", await shortcut.Task.WaitAsync(Deadline));
+        Assert.Equal("Win+Tab", await shortcut.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken));
         Assert.True(service.Status.Connected);
         Assert.Single(backend.Sessions);
         Assert.Equal((ushort)1600, backend.HardwareDpi);
@@ -372,12 +372,12 @@ public class LogitechMouseServiceTests
         var backend = new Backend { ApplyBlock = new(TaskCreationOptions.RunContinuationsAsynchronously) };
         var store = new Store(backend.Log);
         await using var service = new LogitechMouseService(_ => { }, backend, store);
-        Task apply = service.ApplyAsync(Enabled());
-        await backend.ApplyStarted.Task.WaitAsync(Deadline);
+        Task apply = service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
+        await backend.ApplyStarted.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
         backend.ApplyBlock = null;
 
         service.NotifyDeviceChange();
-        await apply.WaitAsync(Deadline);
+        await apply.WaitAsync(Deadline, TestContext.Current.CancellationToken);
         await WaitForAsync(service, status => status.Connected);
 
         Assert.Equal(2, backend.Sessions.Count);
@@ -390,8 +390,8 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend(); var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(Enabled());
-        var scanned = await service.ScanAsync();
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
+        var scanned = await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.NotNull(backend.LastActiveScan);
         Assert.Same(backend.LastActiveScan, Assert.Single(scanned));
         Assert.Equal(service.Status.Device!.Path, scanned[0].Path);
@@ -402,7 +402,7 @@ public class LogitechMouseServiceTests
         service.NotifyDeviceChange();
         Assert.Null(store.Journal);
         Assert.Equal((ushort)1000, backend.HardwareDpi);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => service.ApplyAsync(Enabled()));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -421,10 +421,10 @@ public class LogitechMouseServiceTests
             }
             catch (Exception error) when (error is ObjectDisposedException or OperationCanceledException) { }
         })).ToArray();
-        Task stop = Task.Run(async () => { await start.Task; await service.StopAsync(); });
+        Task stop = Task.Run(async () => { await start.Task; await service.StopAsync(); }, TestContext.Current.CancellationToken);
 
         start.SetResult();
-        await Task.WhenAll(callers.Append(stop)).WaitAsync(Deadline);
+        await Task.WhenAll(callers.Append(stop)).WaitAsync(Deadline, TestContext.Current.CancellationToken);
 
         Assert.Equal(LogitechMouseConnectionState.Disabled, service.Status.State);
         Assert.Empty(backend.OpenedIdentities);
@@ -471,15 +471,15 @@ public class LogitechMouseServiceTests
     {
         var backend = new Backend { Available = false, Absent = true }; var store = new Store(backend.Log); var time = new ManualTime();
         await using var service = new LogitechMouseService(_ => { }, backend, store, time);
-        await service.ApplyAsync(Enabled());
+        await service.ApplyAsync(Enabled(), TestContext.Current.CancellationToken);
         foreach (int seconds in new[] { 2, 5, 15 })
         {
-            await service.ScanAsync();
+            await service.ScanAsync(TestContext.Current.CancellationToken);
             Assert.Equal(TimeSpan.FromSeconds(seconds), Assert.Single(time.ActiveTimers).Delay);
             time.Advance(TimeSpan.FromSeconds(seconds));
             await backend.NextOpenAsync();
         }
-        await service.ScanAsync();
+        await service.ScanAsync(TestContext.Current.CancellationToken);
         Assert.Equal(TimeSpan.FromMinutes(5), Assert.Single(time.ActiveTimers).Delay);
 
         backend.Available = true;

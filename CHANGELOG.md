@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Agentic work hides the taskbar automatically while it covers a display, and shows
+  it again on exit: the taskbar, also topmost, stayed lit above the cover on a
+  single OLED display. The pointer now rests in the cover's top-right pixel.
+- Maintenance: CI actions off the deprecated Node.js 20 (`checkout@v7`,
+  `setup-dotnet@v6`, `upload-artifact@v7`), tests on xUnit v3 with
+  Microsoft.Testing.Platform, Windows App SDK WinUI 2.3.9 and Foundation 2.3.12,
+  and Dependabot for weekly action and NuGet updates.
 - A **logo**: the app's bolt with the name in Outfit, horizontal and stacked, for
   light and dark backgrounds.
 - A shorter **README** in English, with the project's history, panel screenshots,

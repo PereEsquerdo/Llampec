@@ -19,8 +19,10 @@
     <!-- WinUI and Foundation only (with their Base, InteractiveExperiences and WebView2
          dependencies). The Microsoft.WindowsAppSDK metapackage also ships AI, ML, Search,
          Widgets and DWriteCore binaries that Llampec never loads: about 40 MB per build. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
+    <!-- WinUI 2.3.9 asks for InteractiveExperiences 2.1.8, which NuGet does not list; pin the published 2.1.9. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
     <ProjectReference Include="..\Llampec.Core\Llampec.Core.csproj" />
     <Using Include="System.Runtime.InteropServices" />
     <Using Include="Llampec.Flyout.PanelControls" Static="true" />
