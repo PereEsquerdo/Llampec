@@ -46,6 +46,12 @@ with the keyboard attached, unreliable when detached), the user accepted a secon
 undocumented exception: the shell's `ITipInvocation` for the touch keyboard. See
 [touch input](docs/TOUCH_INPUT.md).
 
+On 2026-10-16 the user asked, before the beta, for turning off a single display
+without locking, DDC/CI brightness for external monitors and an agentic-work mode
+that keeps the PC working and reachable with dark screens. Implemented as the
+External monitor and Agentic work modules; see [agentic work](docs/AGENT_MODE.md)
+for what is measured and what still needs hands-on validation.
+
 Keep the original lightweight design: no recurring work for disposable layout
 controls, no idle polling for window features and no speculative memory trimming.
 The user considers the observed roughly 18 MB idle physical memory acceptable;

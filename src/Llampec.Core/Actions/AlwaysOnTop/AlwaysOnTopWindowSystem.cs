@@ -36,6 +36,11 @@ internal interface IAlwaysOnTopWindowSystem : IDisposable
     void ReleaseClaim(WindowIdentity identity);
     bool TrySetTopmost(WindowIdentity identity, bool topmost);
     /// <summary>
+    /// Removes "always on top" from an eligible application window that Llampec did not pin, without
+    /// claiming it. True only when the window is no longer topmost afterwards.
+    /// </summary>
+    bool TryClearTopmost(WindowIdentity identity) => false;
+    /// <summary>
     /// Applies a claimed window's alpha. The first call records the original layered state in
     /// <paramref name="original"/>; pass it back unchanged until it is restored.
     /// </summary>

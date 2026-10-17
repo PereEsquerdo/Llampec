@@ -151,6 +151,31 @@ window's own appearance, restoration at 100 %, on unpin and on disposal, using
 windows of another process (83 checks). Core tests cover the same rules with an
 injected backend. The WinUI controls still need a visual check.
 
+## Windows pinned by other applications (2026-10-17)
+
+The user reported that Claude desktop, while controlling the PC, sometimes keeps its
+window on top with no way to undo it; Llampec only answered that another application
+already kept it on top. Such windows are now listed (after Llampec's own pins) with
+**Pinned by another app**, and the count reads *N pinned · M by other apps*.
+
+- Choosing one, from its row, the main button or the shortcut, removes "always on
+  top" with the documented `SetWindowPos(HWND_NOTOPMOST)`. It is never claimed: it
+  gets no marker, border or opacity, and becomes an ordinary window that Llampec can
+  pin later. The tile shows it as on, with *Unpin: …*.
+- **Restore all** (**Restaurar todo**, **Restaura-ho tot**) next to **Unpin all**
+  unpins Llampec's windows and clears every other application window kept on top.
+  Shell surfaces, tool and no-activate windows, and Llampec's own windows are not
+  eligible, so the taskbar, flyouts and overlays are left alone.
+- Only an explicit request does this. **Unpin all**, module removal and exit still
+  restore Llampec's own pins only, as before.
+- An application that pins its window again at once is reported: *The application
+  keeps this window on top again. Change it in that application.* Elevated windows
+  refuse it as they refuse a pin.
+
+The native smoke test pins a helper window from the test process, as another
+application would, and checks the listing, the single clear without a claim, and
+Restore all together with a Llampec pin (89 checks).
+
 ## Phase 2: further appearance options
 
 Custom border colors, transparency and per-window appearance are implemented

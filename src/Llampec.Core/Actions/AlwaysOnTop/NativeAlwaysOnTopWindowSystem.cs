@@ -221,6 +221,20 @@ internal sealed class NativeAlwaysOnTopWindowSystem : IAlwaysOnTopWindowSystem
         return result && HasClaim(identity) && IsTopmost(identity.Handle) == topmost;
     }
 
+    public bool TryClearTopmost(WindowIdentity identity)
+    {
+        LastError = null;
+        if (Read(identity.Handle) is not { IsEligible: true, IsTopmost: true } current || current.Identity != identity) return false;
+        if (HasClaim(identity) || IsHung(identity.Handle)) return false;
+        // HWND_NOTOPMOST through the documented SetWindowPos z-order change.
+        if (!SetWindowPos(identity.Handle, -2, 0, 0, 0, 0, NoSize | NoMove | NoActivate | NoOwnerZOrder))
+        {
+            SetOperationError("Could not unpin this window.");
+            return false;
+        }
+        return Matches(identity) && !IsTopmost(identity.Handle);
+    }
+
     /// <summary>
     /// WS_EX_LAYERED plus SetLayeredWindowAttributes(LWA_ALPHA), as documented for layered windows.
     /// A window that is already layered keeps its color key; one drawn with UpdateLayeredWindow has no

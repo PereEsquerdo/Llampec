@@ -6,7 +6,7 @@ using Llampec.Settings;
 
 internal static class Program
 {
-    private const uint NoActivate = 0x10, NoZOrder = 0x4;
+    private const uint NoActivate = 0x10, NoZOrder = 0x4, NoMove = 0x2, NoSize = 0x1;
     private const int ExStyle = -20;
     private static int _checks;
     private static nint _hostMainWindow;
@@ -71,6 +71,27 @@ internal static class Program
         finally { if (hiddenPalette != 0) Native.DestroyWindow(hiddenPalette); }
 
         ValidateOwnedDialogResolution(first);
+        service.GetWindows();
+
+        // Another application pins its window (as a computer-use agent can) and offers no way back.
+        second.VerifyOwned();
+        Check(Native.SetWindowPos(second.Handle, -1, 0, 0, 0, 0, NoActivate | NoMove | NoSize),
+            "Synthetic other-app pin is applied");
+        var otherApp = service.GetWindows().SingleOrDefault(w => w.Handle == second.Handle);
+        Check(otherApp is { IsPinned: true, PinnedByOtherApp: true } && service.OtherAppPinCount == 1 && service.PinnedCount == 0,
+            "Other-app pin is listed as such without becoming Llampec's");
+        service.Toggle(second.Handle);
+        Check(service.Error is null && !IsTopmost(second.Handle) && service.PinnedCount == 0,
+            "Choosing an other-app pin clears it without claiming it");
+        Check(Native.SetWindowPos(second.Handle, -1, 0, 0, 0, 0, NoActivate | NoMove | NoSize),
+            "Synthetic other-app pin is applied again");
+        service.GetWindows();
+        service.Toggle(first.Handle);
+        Check(service.PinnedCount == 1 && IsTopmost(first.Handle), "A Llampec pin coexists with the other-app pin");
+        service.RestoreAll();
+        Check(service.Error is null && !IsTopmost(first.Handle) && !IsTopmost(second.Handle)
+            && service.PinnedCount == 0 && service.OtherAppPinCount == 0,
+            "Restore all clears Llampec's and the other application's pins");
         service.GetWindows();
 
         first.VerifyOwned();

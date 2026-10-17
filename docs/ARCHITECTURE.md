@@ -28,15 +28,21 @@ SDK files included and a separate .NET Runtime requirement.
 - The camera module observes Windows' Media Foundation sensor activity monitor only
   while the panel is visible. The power module reads its state when the panel opens.
   See [camera](CAMERA.md) and [power](POWER.md).
+- `ExternalMonitorService` (Core) serializes DDC/CI exchanges on the thread pool and
+  is shared by the external-monitor and agentic-work modules; it holds no handles or
+  threads while idle. Agentic work owns its power request, topology, monitor standby
+  and `AgentScreen` windows only while active, with a recovery record for an
+  interrupted session. See [external monitor](MONITOR.md) and [agentic work](AGENT_MODE.md).
 
-`ModuleCatalog` supplies static id/title/icon/subpage metadata for all fourteen tile
+`ModuleCatalog` supplies static id/title/icon/subpage metadata for all eighteen tile
 modules, including disabled ones, without constructing services. Preferences retain
 order, membership and visibility by stable identifier. `App.Modules` constructs
 only enabled actions and owns the dynamic lifetime of their services and shortcuts.
 Stateful enabled services such as caffeine and theme scheduling live outside page
 controls, so hiding the panel does not stop them. The catalogue comprises HDR,
 display power, theme, projection, taskbar, touch taskbar, caffeine, Always on Top,
-rotation, screenshot, fullscreen, power, MX mouse and camera. Removing the MX mouse
+rotation, screenshot, fullscreen, power, MX mouse, camera, touch keyboard, virtual
+touchpad, external monitor and agentic work. Removing the MX mouse
 module first restores the mouse's original settings; if that fails, the module
 stays enabled. Then its Logitech service and HID reader are released.
 

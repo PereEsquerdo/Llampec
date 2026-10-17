@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+- Always on Top: windows **pinned by another application** (for example by an
+  agent controlling the PC) are listed and can be unpinned from their row, the
+  button or the shortcut, without Llampec claiming them. **Restore all** clears
+  Llampec's pins and those of other applications; shell surfaces are left alone.
+  See [Always on Top](docs/ALWAYS_ON_TOP.md#windows-pinned-by-other-applications-2026-10-17).
+- Tighter panel: one-line titles and subtitles that scroll while hovered or
+  focused when they do not fit, a pinned-count badge instead of a third line, and
+  smaller gaps. A row went from about 122 to 98 DIP (Quick Settings: about 96).
+  See [panel layout](docs/PANEL_LAYOUT.md#tile-captions-and-spacing-2026-10-17).
+- Add an **External monitor** module for DDC/CI monitors: brightness, contrast and
+  volume sliders per monitor, and a tap that puts them into their own standby while
+  Windows keeps them in the desktop (no standby, no lock, no moved windows). State is
+  read on the thread pool when the panel or its options open; there is no polling.
+  See [external monitor](docs/MONITOR.md).
+- External monitor: **recover a monitor without picture**, for example one behind a
+  USB4 dock that stays dark after sleep while Windows still lists it. Llampec wakes
+  it over DDC/CI and, while it looks for a signal, switches to PC screen only and
+  back, which made Windows enumerate it again. Available on demand and, by default,
+  as one check 8 s after Windows turns the screen on. See
+  [external monitor](docs/MONITOR.md#monitor-without-picture-after-sleep).
+- **Turn off display** becomes **Turn off displays** and gains options to turn off
+  just the built-in panel or just one DDC/CI monitor, which neither suspends nor
+  locks the PC. Neither these options nor the External monitor tap can leave every
+  display dark. The button itself still turns off all displays (Modern Standby).
+- Add an **Agentic work** module that keeps the PC working for local agents and
+  remote access with the screens dark: Second screen only for the built-in panel
+  when another display is on, DDC/CI standby for external monitors, black
+  capture-excluded covers for displays that stay lit, a power request that keeps the
+  session unlocked (optional) and, optionally, best power efficiency. A physical key,
+  click, touch or mouse movement restores everything; input injected by agents and
+  remote tools does not. An interrupted session is restored at the next start.
+  Measured on a Surface with an external monitor: 8.2 → 6.0 W. See
+  [agentic work](docs/AGENT_MODE.md).
+
 ## 0.2.0-alpha.9 — 2026-10-11
 
 - Add a per-user **installer** for ARM64 and x64 (Inno Setup): no administrator

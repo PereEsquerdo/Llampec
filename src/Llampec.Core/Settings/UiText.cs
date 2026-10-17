@@ -196,7 +196,6 @@ public static class UiText
         ["Window tracking is unavailable. Choose a window from the list."] = ("No se puede seguir la ventana activa. Elige una de la lista.", "No es pot seguir la finestra activa. Tria'n una de la llista."),
         ["Could not pin this window."] = ("No se ha podido fijar esta ventana.", "No s’ha pogut fixar esta finestra."),
         ["Could not unpin this window."] = ("No se ha podido desfijar esta ventana.", "No s’ha pogut desfixar esta finestra."),
-        ["This window is already kept on top by another application."] = ("Otra aplicación ya mantiene esta ventana siempre encima.", "Una altra aplicació ja manté esta finestra sempre al davant."),
         ["This window is no longer available."] = ("Esta ventana ya no está disponible.", "Esta finestra ja no està disponible."),
         ["Could not show the window border."] = ("No se ha podido mostrar el borde de la ventana.", "No s’ha pogut mostrar la vora de la finestra."),
         ["Appearance"] = ("Apariencia", "Aparença"),
@@ -213,6 +212,15 @@ public static class UiText
         ["Enter a whole number from 1 to 8."] = ("Introduce un número entero del 1 al 8.", "Introduïx un nombre enter de l’1 al 8."),
         ["Shortcut"] = ("Atajo de teclado", "Drecera de teclat"),
         ["Unpin all"] = ("Desfijar todas", "Desfixa-les totes"),
+        ["Restore all"] = ("Restaurar todo", "Restaura-ho tot"),
+        ["Removes Always on Top from every app window, including those pinned by other apps."] =
+            ("Quita «Siempre encima» de todas las ventanas de aplicación, también las fijadas por otras aplicaciones.",
+             "Lleva «Sempre al davant» de totes les finestres d'aplicació, també les fixades per altres aplicacions."),
+        ["Pinned by another app"] = ("Fijada por otra aplicación", "Fixada per una altra aplicació"),
+        ["{0} pinned · {1} by other apps"] = ("{0} fijadas · {1} por otras aplicaciones", "{0} fixades · {1} per altres aplicacions"),
+        ["The application keeps this window on top again. Change it in that application."] =
+            ("La aplicación vuelve a poner esta ventana encima. Cámbialo en esa aplicación.",
+             "L'aplicació torna a posar esta finestra al davant. Canvia-ho en eixa aplicació."),
         ["Refresh windows"] = ("Actualizar ventanas", "Actualitza les finestres"),
         ["No windows available."] = ("No hay ventanas disponibles.", "No hi ha finestres disponibles."),
         ["Shortcut is already in use."] = ("El atajo de teclado ya está en uso.", "La drecera de teclat ja està en ús."),
@@ -262,7 +270,7 @@ public static class UiText
         ["{0} min"] = ("{0} min", "{0} min"),
         ["{0} h"] = ("{0} h", "{0} h"),
         ["{0} h {1} min"] = ("{0} h {1} min", "{0} h {1} min"),
-        ["Turn off display"] = ("Apagar pantalla", "Apaga la pantalla"),
+        ["Turn off displays"] = ("Apagar pantallas", "Apaga les pantalles"),
         ["Auto-hide taskbar"] = ("Ocultar barra de tareas", "Oculta la barra de tasques"),
         ["Tablet taskbar active"] = ("Barra táctil activa", "Barra tàctil activa"),
         ["Taskbar mode unavailable"] = ("Modo de barra desconocido", "Mode de barra desconegut"),
@@ -362,5 +370,76 @@ public static class UiText
         ["Could not open the touch keyboard."] = ("No se ha podido abrir el teclado táctil.", "No s'ha pogut obrir el teclat tàctil."),
         ["Could not open the virtual touchpad."] = ("No se ha podido abrir el panel táctil.", "No s'ha pogut obrir el ratolí tàctil."),
         ["Could not change the taskbar icon."] = ("No se ha podido cambiar el icono de la barra.", "No s'ha pogut canviar la icona de la barra."),
+        ["External monitor"] = ("Monitor externo", "Monitor extern"),
+        ["Built-in display"] = ("Pantalla integrada", "Pantalla integrada"),
+        ["No DDC/CI monitor"] = ("Sin monitor DDC/CI", "Cap monitor DDC/CI"),
+        ["Standby"] = ("En reposo", "En repòs"),
+        ["No signal"] = ("Sin señal", "Sense senyal"),
+        ["Brightness {0} %"] = ("Brillo {0} %", "Brillantor {0} %"),
+        ["Brightness"] = ("Brillo", "Brillantor"),
+        ["Contrast"] = ("Contraste", "Contrast"),
+        ["Volume"] = ("Volumen", "Volum"),
+        ["Monitor on"] = ("Monitor encendido", "Monitor encés"),
+        ["Reading monitor settings…"] = ("Leyendo los ajustes del monitor…", "S'estan llegint els ajustos del monitor…"),
+        ["No monitor answered over DDC/CI."] = ("Ningún monitor ha respondido por DDC/CI.", "Cap monitor ha respost per DDC/CI."),
+        ["Uses DDC/CI. If a monitor does not appear, turn on DDC/CI in its own menu. Standby keeps the monitor in the desktop: windows do not move and Windows does not lock."] =
+            ("Usa DDC/CI. Si un monitor no aparece, activa DDC/CI en su propio menú. En reposo, el monitor sigue formando parte del escritorio: las ventanas no se mueven y Windows no se bloquea.",
+             "Usa DDC/CI. Si un monitor no apareix, activa DDC/CI en el seu propi menú. En repòs, el monitor continua formant part de l'escriptori: les finestres no es mouen i Windows no es bloqueja."),
+        ["Windows Quick Settings controls the built-in display's brightness."] =
+            ("El brillo de la pantalla integrada se ajusta en la Configuración rápida de Windows.",
+             "La brillantor de la pantalla integrada s'ajusta en la Configuració ràpida de Windows."),
+        ["Monitor without picture"] = ("Monitor sin imagen", "Monitor sense imatge"),
+        ["If Windows lists the monitor but it stays dark, for example after sleep, Llampec wakes it and rebuilds the connection. The screens may flicker for a moment."] =
+            ("Si Windows muestra el monitor pero sigue a oscuras, por ejemplo después de la suspensión, Llampec lo despierta y rehace la conexión. Las pantallas pueden parpadear un momento.",
+             "Si Windows mostra el monitor però continua a fosques, per exemple després de la suspensió, Llampec el desperta i refà la connexió. Les pantalles poden parpellejar un moment."),
+        ["Recover monitor"] = ("Recuperar monitor", "Recupera el monitor"),
+        ["Recovering…"] = ("Recuperando…", "S'està recuperant…"),
+        ["The monitor did not come back. Try unplugging and reconnecting it."] =
+            ("El monitor no ha vuelto. Prueba a desconectarlo y conectarlo de nuevo.", "El monitor no ha tornat. Prova de desconnectar-lo i tornar-lo a connectar."),
+        ["Done. If it is still dark, try unplugging and reconnecting it."] =
+            ("Hecho. Si sigue a oscuras, prueba a desconectarlo y conectarlo de nuevo.", "Fet. Si continua a fosques, prova de desconnectar-lo i tornar-lo a connectar."),
+        ["Recover automatically when the screen turns on"] =
+            ("Recuperar automáticamente al encender la pantalla", "Recupera automàticament en encendre la pantalla"),
+        ["Checks once, a few seconds after Windows turns the screen on, whether a monitor stayed without a signal."] =
+            ("Comprueba una vez, unos segundos después de que Windows encienda la pantalla, si algún monitor se ha quedado sin señal.",
+             "Comprova una vegada, uns segons després que Windows encenga la pantalla, si algun monitor s'ha quedat sense senyal."),
+        ["Another display must stay on"] = ("Otra pantalla debe seguir encendida", "Una altra pantalla ha de continuar encesa"),
+        ["Turn off one display"] = ("Apagar una sola pantalla", "Apaga només una pantalla"),
+        ["The other display stays on, so the PC neither sleeps nor locks."] =
+            ("La otra pantalla sigue encendida, así que el PC no entra en suspensión ni se bloquea.",
+             "L'altra pantalla continua encesa, així que l'ordinador no entra en suspensió ni es bloqueja."),
+        ["Reading displays…"] = ("Leyendo las pantallas…", "S'estan llegint les pantalles…"),
+        ["Connect another display to turn off just one."] =
+            ("Conecta otra pantalla para poder apagar solo una.", "Connecta una altra pantalla per a poder apagar-ne només una."),
+        ["Turn off all displays"] = ("Apagar todas las pantallas", "Apaga totes les pantalles"),
+        ["Windows enters standby: programs pause and it may ask you to sign in. To keep agents working with the screens dark, use Agentic work."] =
+            ("Windows entra en espera: los programas se pausan y puede pedir que inicies sesión. Para que los agentes sigan trabajando con las pantallas a oscuras, usa Trabajo agéntico.",
+             "Windows entra en espera: els programes es pausen i pot demanar que inicies la sessió. Perquè els agents continuen treballant amb les pantalles a fosques, usa Treball agèntic."),
+        ["Agentic work"] = ("Trabajo agéntico", "Treball agèntic"),
+        ["Active"] = ("Activo", "Actiu"),
+        ["Could not activate agentic work."] = ("No se ha podido activar el trabajo agéntico.", "No s'ha pogut activar el treball agèntic."),
+        ["Keeps the PC working for agents and remote access with the screens dark. To exit, press a key, click, touch the screen or move the mouse on this PC. Input from agents and remote tools does not exit."] =
+            ("Mantiene el PC trabajando para agentes y acceso remoto con las pantallas a oscuras. Para salir, pulsa una tecla, haz clic, toca la pantalla o mueve el ratón en este PC. La entrada de agentes y herramientas remotas no hace salir.",
+             "Manté l'ordinador treballant per a agents i accés remot amb les pantalles a fosques. Per a eixir, prem una tecla, fes clic, toca la pantalla o mou el ratolí en este ordinador. L'entrada d'agents i ferramentes remotes no fa eixir."),
+        ["Turn off the built-in display"] = ("Apagar la pantalla integrada", "Apaga la pantalla integrada"),
+        ["When another display is on. Its windows move to that display until you exit."] =
+            ("Cuando hay otra pantalla encendida. Sus ventanas pasan a esa pantalla hasta que salgas.",
+             "Quan hi ha una altra pantalla encesa. Les seues finestres passen a eixa pantalla fins que isques."),
+        ["Put external monitors in standby"] = ("Poner los monitores externos en reposo", "Posa els monitors externs en repòs"),
+        ["Uses DDC/CI. Windows keeps them in the desktop."] = ("Usa DDC/CI. Windows los mantiene en el escritorio.", "Usa DDC/CI. Windows els manté en l'escriptori."),
+        ["Cover displays that stay on"] = ("Cubrir las pantallas que siguen encendidas", "Cobrix les pantalles que continuen enceses"),
+        ["With black, which turns OLED pixels off. Agents and remote tools still see the desktop."] =
+            ("Con negro, que apaga los píxeles OLED. Los agentes y las herramientas remotas siguen viendo el escritorio.",
+             "Amb negre, que apaga els píxels OLED. Els agents i les ferramentes remotes continuen veient l'escriptori."),
+        ["Keep the session unlocked"] = ("Mantener la sesión desbloqueada", "Mantín la sessió desbloquejada"),
+        ["Windows keeps the screen on for itself, so it neither sleeps nor locks. Off: Windows turns the screens off after its usual time and locks the session; agents keep working with lower consumption."] =
+            ("Para Windows la pantalla sigue encendida, así que no entra en suspensión ni se bloquea. Desactivado: Windows apaga las pantallas tras su tiempo habitual y bloquea la sesión; los agentes siguen trabajando con menor consumo.",
+             "Per a Windows la pantalla continua encesa, així que no entra en suspensió ni es bloqueja. Desactivat: Windows apaga les pantalles després del seu temps habitual i bloqueja la sessió; els agents continuen treballant amb menys consum."),
+        ["Switches the power mode while active and restores it on exit."] =
+            ("Cambia el modo de energía mientras está activo y lo restaura al salir.", "Canvia el mode d'energia mentre està actiu i el restaura en eixir."),
+        ["Active. Changes apply the next time you start it."] =
+            ("Activo. Los cambios se aplicarán la próxima vez que lo inicies.", "Actiu. Els canvis s'aplicaran la pròxima vegada que l'inicies."),
+        ["Exit agentic work"] = ("Salir del trabajo agéntico", "Ix del treball agèntic"),
+        ["Start agentic work"] = ("Iniciar trabajo agéntico", "Inicia el treball agèntic"),
     };
 }

@@ -15,7 +15,9 @@ public static class ThemeScheduleStatus
         string duration = minutes < 60 ? Text("{0} min", minutes)
             : minutes % 60 == 0 ? Text("{0} h", minutes / 60)
             : Text("{0} h {1} min", minutes / 60, minutes % 60);
-        return state + "\n" + (compact ? duration : Text(plan!.Value.NextLight ? "Light in {0}" : "Dark in {0}", duration));
+        // The tile has a single subtitle line; the tooltip and accessible text keep two.
+        return compact ? state + " · " + duration
+            : state + "\n" + Text(plan!.Value.NextLight ? "Light in {0}" : "Dark in {0}", duration);
 
         string Text(string key, params object[] values)
             => string.Format(CultureInfo.CurrentCulture, UiText.Translate(key, language), values);

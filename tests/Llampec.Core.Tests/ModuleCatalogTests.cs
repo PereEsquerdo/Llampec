@@ -12,9 +12,9 @@ public sealed class ModuleCatalogTests
         {
             "hdr", "display-off", "theme", "projection", "taskbar-autohide", "touch-taskbar", "caffeine",
             "always-on-top", "rotation", "screenshot", "fullscreen", "power", "mouse", "camera",
-            "touch-keyboard", "touchpad"
+            "touch-keyboard", "touchpad", "monitor", "agent-mode"
         }, ModuleCatalog.All.Select(module => module.Id));
-        Assert.Equal(16, ModuleCatalog.All.Select(module => module.Id).Distinct().Count());
+        Assert.Equal(18, ModuleCatalog.All.Select(module => module.Id).Distinct().Count());
         Assert.All(ModuleCatalog.All, module =>
         {
             Assert.False(string.IsNullOrWhiteSpace(module.Title));
@@ -27,8 +27,8 @@ public sealed class ModuleCatalogTests
             }
         });
         Assert.Equal("\uE708", Assert.Single(ModuleCatalog.All, module => module.Id == "theme").GlyphBadge);
-        Assert.Equal(new[] { "hdr", "theme", "projection", "caffeine", "always-on-top", "rotation", "fullscreen", "power", "mouse",
-            "touch-keyboard", "touchpad" },
+        Assert.Equal(new[] { "hdr", "display-off", "theme", "projection", "caffeine", "always-on-top", "rotation", "fullscreen", "power", "mouse",
+            "touch-keyboard", "touchpad", "monitor", "agent-mode" },
             ModuleCatalog.All.Where(module => module.HasSubpage).Select(module => module.Id));
     }
 
@@ -37,12 +37,15 @@ public sealed class ModuleCatalogTests
     {
         // Actions whose construction neither changes nor waits on the system.
         using var caffeine = new Llampec.Actions.Caffeine.CaffeineAction(() => new());
+        using var monitors = new Llampec.Platform.ExternalMonitorService(new AgentModeTests.FakeMonitors());
+        using var monitor = new Llampec.Actions.Monitor.MonitorAction(monitors);
+        using var agentMode = new Llampec.Actions.AgentMode.AgentModeAction(() => new(), new AgentModeTests.FakePlatform());
         IQuickAction[] actions =
         [
             new Llampec.Actions.Theme.ThemeAction(), new Llampec.Actions.Taskbar.TaskbarAutoHideAction(),
             new Llampec.Actions.Taskbar.TouchTaskbarAction(), caffeine, new Llampec.Actions.Screenshot.ScreenshotAction(),
             new Llampec.Actions.Power.PowerAction(), new Llampec.Actions.Touch.TouchKeyboardAction(),
-            new Llampec.Actions.Touch.TouchpadAction(),
+            new Llampec.Actions.Touch.TouchpadAction(), monitor, agentMode,
         ];
         foreach (var action in actions)
         {
@@ -60,6 +63,6 @@ public sealed class ModuleCatalogTests
         var collection = Assert.IsAssignableFrom<ICollection<ModuleDescriptor>>(ModuleCatalog.All);
         Assert.True(collection.IsReadOnly);
         Assert.Throws<NotSupportedException>(() => collection.Clear());
-        Assert.Equal(16, ModuleCatalog.All.Count);
+        Assert.Equal(18, ModuleCatalog.All.Count);
     }
 }

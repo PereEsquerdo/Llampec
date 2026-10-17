@@ -72,6 +72,29 @@ small eleven-module editor uses local pointer capture and direct draft moves
 rather than grouped `ListViewBase.CanReorderItems`. See [Microsoft's reordering
 contract](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.listviewbase.canreorderitems?view=windows-app-sdk-2.0).
 
+## Tile captions and spacing (2026-10-17)
+
+The user asked for Windows Quick Settings' tighter vertical rhythm while keeping
+the useful subtitle. Measured on the Surface at 200 %: a Quick Settings row is about
+96 DIP; a Llampec row with a three-line caption was about 122 DIP.
+
+- Title and subtitle take one line each, ending in an ellipsis. A line that does
+  not fit scrolls while the tile is hovered or has keyboard focus: after 0.6 s it
+  moves to its end at 40 DIP/s, holds 1 s and returns, then rests. It is a
+  render-transform storyboard (compositor), with nothing running otherwise, and is
+  off when Windows animations are off. Tooltips and accessible help keep the full
+  text. `MarqueeText` places the line in a `Canvas` so the hidden part is not clipped
+  by its layout slot.
+- The scheduled dark-mode subtitle becomes *Light · 6 h 32 min* on the tile.
+- Always on Top's pinned count is a small accent badge on its button, with a ring in
+  the panel colour so it shows on a switched-on button, instead of a third line.
+- Spacing: 6 DIP between button and caption (was 8), no gap between title and
+  subtitle (was 2), 12 DIP between rows (was 16). The editor uses the same
+  proportions and one-line captions.
+
+A row is now about 98 DIP (measured on the same device); the user's four-category panel no
+longer needs to scroll on the Surface.
+
 ## Module choices and saving
 
 Disabling an icon is a draft change until Save. A saved disabled module is removed

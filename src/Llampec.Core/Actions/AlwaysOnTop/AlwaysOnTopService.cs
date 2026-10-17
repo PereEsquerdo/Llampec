@@ -3,7 +3,8 @@ using Llampec.Settings;
 
 namespace Llampec.Actions.AlwaysOnTop;
 
-public sealed record PinnableWindow(nint Handle, string Title, bool IsPinned);
+/// <param name="PinnedByOtherApp">Kept on top by another application: shown so it can be undone, never claimed.</param>
+public sealed record PinnableWindow(nint Handle, string Title, bool IsPinned, bool PinnedByOtherApp = false);
 
 /// <summary>
 /// Session-owned pins, independent of disposable panel controls. Construct and use on the UI thread:
@@ -48,6 +49,10 @@ public sealed class AlwaysOnTopService : IDisposable
     public string? Error { get; private set; }
     public bool HasTarget => _target is not null;
     public bool IsTargetPinned => _target is { } target && _pins.TryGetValue(target.Handle, out var pin) && pin.Identity == target;
+    /// <summary>The target is kept on top by another application; toggling it removes that.</summary>
+    public bool IsTargetPinnedByOtherApp { get; private set; }
+    /// <summary>Application windows kept on top by other applications, as of the last refresh.</summary>
+    public int OtherAppPinCount { get; private set; }
     public string TargetTitle { get; private set; } = string.Empty;
 
     public AlwaysOnTopService(Func<AlwaysOnTopSettings> preferences, Func<nint, IAlwaysOnTopBorder>? borderFactory = null)
@@ -168,7 +173,9 @@ public sealed class AlwaysOnTopService : IDisposable
             }
             if (window.IsTopmost)
             {
-                Error = "This window is already kept on top by another application.";
+                // Another application pinned it, possibly without a way to undo it. The user asked
+                // for this window explicitly, so clear it without claiming it as Llampec's own pin.
+                if (!ClearOtherAppPin(identity)) Error ??= "Could not unpin this window.";
                 return;
             }
             if (!_windows.TryClaim(identity))
@@ -207,6 +214,41 @@ public sealed class AlwaysOnTopService : IDisposable
                 if (!Unpin(pin)) Error = _windows.LastError ?? "Could not unpin this window.";
         }
         finally { _mutating = false; Refresh(); }
+    }
+
+    /// <summary>
+    /// Unpins Llampec's windows and also clears "always on top" from every application window that
+    /// another application pinned (the topmost z-order band, WS_EX_TOPMOST). Shell surfaces and
+    /// Llampec's own windows are not application windows here and are left alone. Only an explicit
+    /// user request does this: module removal and exit restore Llampec's own pins only.
+    /// </summary>
+    public void RestoreAll()
+    {
+        if (_disposed || _mutating) return;
+        _mutating = true;
+        try
+        {
+            Error = null;
+            foreach (var pin in _pins.Values.ToArray())
+                if (!Unpin(pin)) Error = _windows.LastError ?? "Could not unpin this window.";
+            foreach (var window in _windows.Enumerate())
+                if (window is { IsEligible: true, IsTopmost: true } && !_pins.ContainsKey(window.Identity.Handle)
+                    && !ClearOtherAppPin(window.Identity)) Error ??= "Could not unpin this window.";
+        }
+        finally { _mutating = false; Refresh(); }
+    }
+
+    private bool ClearOtherAppPin(WindowIdentity identity)
+    {
+        bool cleared = _windows.TryClearTopmost(identity);
+        if (cleared) Log.Info($"Always on Top: cleared another application's pin on 0x{identity.Handle:X}.");
+        else
+        {
+            Error = _windows.LastError ?? (ReadMatching(identity) is { IsTopmost: true }
+                ? "The application keeps this window on top again. Change it in that application." : null);
+            Log.Warn($"Always on Top: could not clear another application's pin on 0x{identity.Handle:X}: {Error}");
+        }
+        return cleared;
     }
 
     /// <summary>
@@ -378,6 +420,7 @@ public sealed class AlwaysOnTopService : IDisposable
             var targetWindow = _target is { } target ? ReadMatching(target) : null;
             if (targetWindow is not { IsEligible: true }) _target = null;
             TargetTitle = _target is null ? string.Empty : targetWindow!.Title;
+            IsTargetPinnedByOtherApp = _target is not null && targetWindow!.IsTopmost && !IsTargetPinned;
 
             var identities = new Dictionary<nint, WindowIdentity>();
             var available = new List<PinnableWindow>();
@@ -386,14 +429,19 @@ public sealed class AlwaysOnTopService : IDisposable
                 identities[pin.Identity.Handle] = pin.Identity;
                 available.Add(new(pin.Identity.Handle, pin.Title, true));
             }
+            int otherApps = 0;
             foreach (var window in _windows.Enumerate())
             {
-                if (!window.IsEligible || window.IsTopmost || identities.ContainsKey(window.Identity.Handle)) continue;
+                if (!window.IsEligible || identities.ContainsKey(window.Identity.Handle)) continue;
                 identities[window.Identity.Handle] = window.Identity;
-                available.Add(new(window.Identity.Handle, window.Title, false));
+                available.Add(new(window.Identity.Handle, window.Title, window.IsTopmost, window.IsTopmost));
+                if (window.IsTopmost) otherApps++;
             }
+            OtherAppPinCount = otherApps;
             _availableIdentities = identities;
-            _availableWindows = available.OrderByDescending(w => w.IsPinned).ThenBy(w => w.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
+            // Llampec's pins, then other applications' pins, then the rest, each by title.
+            _availableWindows = available.OrderByDescending(w => w.IsPinned && !w.PinnedByOtherApp).ThenByDescending(w => w.PinnedByOtherApp)
+                .ThenBy(w => w.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
         }
         finally { _refreshing = false; }
         PublishIfChanged();
@@ -457,7 +505,7 @@ public sealed class AlwaysOnTopService : IDisposable
     private void PublishIfChanged()
     {
         UpdateWindowTracking();
-        var state = (_target, TargetTitle, IsTargetPinned, Error);
+        var state = (_target, TargetTitle, IsTargetPinned || IsTargetPinnedByOtherApp, Error);
         if (_publishedState == state && _publishedWindows.SequenceEqual(_availableWindows)) return;
         _publishedState = state;
         _publishedWindows = _availableWindows;

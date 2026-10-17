@@ -31,10 +31,11 @@ public sealed class AlwaysOnTopAction : QuickActionBase, IDisposable
     private void ReadServiceState()
     {
         Set(ref _pinnedCount, _service.PinnedCount);
-        State = _service.IsTargetPinned ? ActionState.On : ActionState.Off;
+        bool pinned = _service.IsTargetPinned || _service.IsTargetPinnedByOtherApp;
+        State = pinned ? ActionState.On : ActionState.Off;
         Subtitle = _service.Error is { } error ? UiText.Get(error)
             : !_service.HasTarget ? UiText.Get("Choose a window")
-            : UiText.Format(_service.IsTargetPinned ? "Unpin: {0}" : "Pin: {0}", _service.TargetTitle);
+            : UiText.Format(pinned ? "Unpin: {0}" : "Pin: {0}", _service.TargetTitle);
     }
 
     protected override Task ExecuteCoreAsync(CancellationToken cancellationToken)

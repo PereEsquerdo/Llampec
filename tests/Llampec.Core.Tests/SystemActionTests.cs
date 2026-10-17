@@ -20,11 +20,11 @@ namespace Llampec.Tests;
 public class SystemActionTests
 {
     [Fact]
-    public void Display_off_is_a_stateless_button()
+    public void Display_off_is_a_stateless_button_with_single_display_options()
     {
         using var events = new SystemEvents();
         var displayOff = new DisplayOffAction(events);
-        Assert.Equal(ActionKind.Button, displayOff.Kind);
+        Assert.Equal(ActionKind.ButtonWithSubpage, displayOff.Kind);
         Assert.Equal(ActionState.None, displayOff.State);
     }
 

@@ -29,6 +29,18 @@ public sealed class AppSettings
         get => _alwaysOnTop;
         set => _alwaysOnTop = value ?? new();
     }
+    private MonitorSettings _monitor = new();
+    public MonitorSettings Monitor
+    {
+        get => _monitor;
+        set => _monitor = value ?? new();
+    }
+    private AgentModeSettings _agentMode = new();
+    public AgentModeSettings AgentMode
+    {
+        get => _agentMode;
+        set => _agentMode = value ?? new();
+    }
     private FullscreenSettings _fullscreen = new();
     public FullscreenSettings Fullscreen
     {

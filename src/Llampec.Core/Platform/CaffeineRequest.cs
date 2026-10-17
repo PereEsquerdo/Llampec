@@ -11,9 +11,12 @@ public sealed class CaffeineRequest : IDisposable
     private bool _system, _display;
     private CaffeineRequest(SafeFileHandle handle) => _handle = handle;
 
-    public static IDisposable Create(bool keepDisplayOn)
+    public static IDisposable Create(bool keepDisplayOn) => Create(keepDisplayOn, "Caffeine mode");
+
+    /// <param name="feature">Catalogue text naming the feature in powercfg /requests.</param>
+    public static IDisposable Create(bool keepDisplayOn, string feature)
     {
-        nint reason = Marshal.StringToHGlobalUni("Llampec: " + UiText.Get("Caffeine mode"));
+        nint reason = Marshal.StringToHGlobalUni("Llampec: " + UiText.Get(feature));
         SafeFileHandle handle;
         try
         {

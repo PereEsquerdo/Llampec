@@ -17,6 +17,16 @@
    <Style x:Key="TileStatusStyle" TargetType="TextBlock">
     <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
    </Style>
+   <!-- A count on a tile's button, such as Always on Top's pinned windows. -->
+   <Style x:Key="TileBadgeStyle" TargetType="Border">
+    <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+    <!-- A ring in the panel colour keeps it visible on an accent (switched-on) button. -->
+    <Setter Property="BorderBrush" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+    <Setter Property="BorderThickness" Value="1.5" />
+   </Style>
+   <Style x:Key="TileBadgeTextStyle" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+   </Style>
    <!-- Panel editor. ThemeResource follows Llampec's own theme, not the app default. -->
    <Style x:Key="EditorCardStyle" TargetType="Border">
     <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
@@ -80,7 +90,7 @@
                 HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollMode="Enabled" VerticalScrollBarVisibility="Auto" ZoomMode="Disabled">
    <StackPanel Spacing="12">
-    <Grid x:Name="Tiles" ColumnSpacing="12" RowSpacing="16" />
+    <Grid x:Name="Tiles" ColumnSpacing="12" RowSpacing="12" />
     <StackPanel x:Name="Subpage" Spacing="8" Visibility="Collapsed" />
    </StackPanel>
   </ScrollViewer>

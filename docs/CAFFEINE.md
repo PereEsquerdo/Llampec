@@ -70,6 +70,11 @@ away, when should Windows require you to sign in again?"**; that security choice
 belongs to the user, not to Llampec. Agents that need the visible desktop (computer
 use) cannot work while it is locked.
 
+Since 2026-10-16, **Agentic work** offers the alternative: it keeps the display on
+for Windows (no standby, no lock) and darkens the screens instead, by removing the
+built-in panel from the desktop, putting DDC/CI monitors into their own standby and
+covering what remains with black. See [agentic work](AGENT_MODE.md).
+
 ## Validation
 
 Deterministic tests cover off/indefinite allocation, main-button toggling, all preset

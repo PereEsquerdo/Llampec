@@ -22,13 +22,24 @@ CPU use:
   ordinary desktop activity its background CPU use dropped from about 1 s per
   20 s to none in local measurements.
 
-Llampec lives in the notification area and provides fourteen configurable quick actions:
+Llampec lives in the notification area and provides eighteen configurable quick actions:
 
 - **HDR:** switch all compatible displays or control each display separately.
-- **Display power:** turn off the displays. On Modern Standby devices this enters a
+- **Turn off displays:** its options turn off just one display — the built-in panel
+  (Second screen only) or a DDC/CI monitor (its own standby) — without standby or
+  lock, always keeping one display lit. The button turns off all displays; on Modern Standby devices this enters a
   short standby: programs pause and Windows may ask for sign-in. To keep a local
   agent working, use Caffeine and let the screen turn off by itself; see
-  [Caffeine and Modern Standby](docs/CAFFEINE.md#modern-standby-turn-off-display-and-local-agents).
+  [Caffeine and Modern Standby](docs/CAFFEINE.md#modern-standby-turn-off-display-and-local-agents),
+  or **Agentic work**.
+- **External monitor:** brightness, contrast and volume of DDC/CI monitors, which
+  Windows Quick Settings does not control. Tapping puts them into their own standby
+  without removing them from the desktop. See [external monitor](docs/MONITOR.md).
+- **Agentic work:** keep the PC working for agents and remote access with the
+  screens dark: the built-in panel off when another display is on, external monitors
+  in standby, black covers that agents and remote tools see through, and no standby
+  or lock. Any key, click or touch on the PC restores everything; input from agents
+  and remote tools does not. See [agentic work](docs/AGENT_MODE.md).
 - **Light/dark mode:** change the Windows theme, with optional fixed-hour or
   sunrise/sunset scheduling and a countdown to the next change.
 - **Multiple displays:** choose PC screen only, Duplicate, Extend or Second screen only.
@@ -258,6 +269,8 @@ Developer documentation:
 - [Adding an action](docs/ADDING_AN_ACTION.md)
 - [Theme scheduling](docs/THEME_SCHEDULE.md)
 - [Caffeine mode](docs/CAFFEINE.md)
+- [External monitor](docs/MONITOR.md)
+- [Agentic work](docs/AGENT_MODE.md)
 - [Settings and languages](docs/SETTINGS.md)
 - [Always on Top](docs/ALWAYS_ON_TOP.md)
 - [Screenshot](docs/SCREENSHOT.md)

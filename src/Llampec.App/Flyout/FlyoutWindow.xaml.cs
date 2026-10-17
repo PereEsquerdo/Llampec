@@ -154,7 +154,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
                 Grid.SetRow(heading, row++);
                 Tiles.Children.Add(heading);
             }
-            var grid = new Grid { ColumnSpacing = 12, RowSpacing = 16 };
+            var grid = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
             for (int column = 0; column < _builtTileColumns; column++)
                 grid.ColumnDefinitions.Add(new ColumnDefinition());
             int rows = (group.Tiles.Count + _builtTileColumns - 1) / _builtTileColumns;
@@ -175,7 +175,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
 
     private FrameworkElement BuildTile(TileViewModel tile)
     {
-        var stack = new StackPanel { Spacing = 8 };
+        var stack = new StackPanel { Spacing = 6 };
         var face = new Grid();
         face.ColumnDefinitions.Add(new ColumnDefinition());
         if (tile.HasSubpage) face.ColumnDefinitions.Add(new ColumnDefinition());
@@ -207,28 +207,36 @@ public sealed partial class FlyoutWindow : Window, IDisposable
             Grid.SetColumn(more, 1);
             face.Children.Add(more);
         }
-        var title = new TextBlock { Text = tile.Title, FontSize = 12, TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis };
+        // One line each, as in Windows Quick Settings; a line that does not fit scrolls while the
+        // tile is hovered or focused. The tooltip and accessible help carry the full text.
+        var title = new MarqueeText(_uiSettings);
+        title.SetText(tile.Title);
         ToolTipService.SetToolTip(button, tile.Title);
-        var subtitle = new TextBlock
-        {
-            FontSize = 12, TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            Style = (Style)Root.Resources["TileStatusStyle"],
-        };
-        var caption = new StackPanel { Spacing = 2 };
+        var subtitle = new MarqueeText(_uiSettings, (Style)Root.Resources["TileStatusStyle"]);
+        var caption = new StackPanel();
         caption.Children.Add(title);
         caption.Children.Add(subtitle);
+        void Scroll(bool on) { if (on) { title.Start(); subtitle.Start(); } else { title.Stop(); subtitle.Stop(); } }
+        // The buttons mark pointer events handled for their own visual states.
+        stack.AddHandler(UIElement.PointerEnteredEvent, new PointerEventHandler((_, _) => Scroll(true)), handledEventsToo: true);
+        stack.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler((_, _) => Scroll(false)), handledEventsToo: true);
+        stack.AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler((_, _) => Scroll(false)), handledEventsToo: true);
+        button.GotFocus += (_, _) => { if (button.FocusState == FocusState.Keyboard) Scroll(true); };
+        button.LostFocus += (_, _) => Scroll(false);
+        // A count badge rather than a third caption line keeps the row height of other tiles.
         var pinnedCount = new TextBlock
         {
-            FontSize = 11, TextAlignment = TextAlignment.Center,
-            Style = (Style)Root.Resources["TileStatusStyle"],
-            Visibility = Visibility.Collapsed,
+            FontSize = 10, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Root.Resources["TileBadgeTextStyle"],
         };
-        // The tooltip and accessible help carry the full subtitle.
-        subtitle.MaxLines = 2;
-        subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
-        if (tile.Id == "always-on-top") caption.Children.Add(pinnedCount);
+        var pinnedBadge = new Border
+        {
+            Child = pinnedCount, MinWidth = 18, Height = 18, CornerRadius = new CornerRadius(9), Padding = new Thickness(4, 0, 4, 0),
+            Style = (Style)Root.Resources["TileBadgeStyle"],
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 4, 4, 0), IsHitTestVisible = false, Visibility = Visibility.Collapsed,
+        };
+        if (tile.Id == "always-on-top") face.Children.Add(pinnedBadge);
         var busy = new ProgressBar
         {
             Height = 2, VerticalAlignment = VerticalAlignment.Bottom,
@@ -247,8 +255,7 @@ public sealed partial class FlyoutWindow : Window, IDisposable
             if (button is ToggleButton toggle) toggle.IsChecked = tile.IsOn || tile.IsMixed;
             if (more is not null)
                 more.Style = tile.IsOn || tile.IsMixed ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
-            subtitle.Text = tile.CompactSubtitle ?? "";
-            subtitle.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+            subtitle.SetText(string.IsNullOrEmpty(text) ? null : tile.CompactSubtitle);
             ToolTipService.SetToolTip(subtitle, text);
             ToolTipService.SetToolTip(button, string.IsNullOrEmpty(text) ? tile.Title : $"{tile.Title}\n{text}");
             busy.Visibility = busyNow ? Visibility.Visible : Visibility.Collapsed;
@@ -257,9 +264,11 @@ public sealed partial class FlyoutWindow : Window, IDisposable
             if (tile.Id == "always-on-top")
             {
                 int count = App.Current.AlwaysOnTop?.PinnedCount ?? 0;
-                pinnedCount.Text = UiText.Format("{0} pinned", count);
-                pinnedCount.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                AutomationProperties.SetHelpText(button, $"{text}. {pinnedCount.Text}");
+                string pinned = UiText.Format("{0} pinned", count);
+                pinnedCount.Text = count.ToString(System.Globalization.CultureInfo.CurrentCulture);
+                pinnedBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                ToolTipService.SetToolTip(button, string.IsNullOrEmpty(text) ? $"{tile.Title}\n{pinned}" : $"{tile.Title}\n{text}\n{pinned}");
+                AutomationProperties.SetHelpText(button, $"{text}. {pinned}");
             }
         }
         Observe(tile, Update, _unsubscribe);
@@ -355,6 +364,10 @@ public sealed partial class FlyoutWindow : Window, IDisposable
     {
         if (page.Action is Llampec.Actions.Caffeine.CaffeineAction caffeine) return new CaffeineView(caffeine);
         if (page.Action is Llampec.Actions.Power.PowerAction power) return new PowerView(power);
+        if (page.Action is Llampec.Actions.Monitor.MonitorAction monitor) return new MonitorView(monitor.Monitors);
+        if (page.Action is Llampec.Actions.DisplayOff.DisplayOffAction displayOff)
+            return new DisplayOffView(displayOff, App.Current.ExternalMonitors, page.Toggle);
+        if (page.Action is Llampec.Actions.AgentMode.AgentModeAction agentMode) return new AgentModeView(agentMode, page.Toggle);
         return page.Id switch
         {
             "theme" => new ThemeScheduleView(Hold),

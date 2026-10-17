@@ -311,7 +311,7 @@ public sealed class PanelLayoutEditor : Grid, IDisposable
             Grid.SetColumn(more, 1);
             header.Children.Add(more);
         }
-        var tiles = new Grid { ColumnSpacing = 12, RowSpacing = 16, ChildrenTransitions = Reflow() };
+        var tiles = new Grid { ColumnSpacing = 12, RowSpacing = 12, ChildrenTransitions = Reflow() };
         var empty = new Border
         {
             Style = EditorStyle("EditorSlotStyle"), CornerRadius = new CornerRadius(6), MinHeight = 48,
@@ -341,13 +341,16 @@ public sealed class PanelLayoutEditor : Grid, IDisposable
     {
         if (_tiles.TryGetValue(module.Id, out var existing)) return existing;
         string title = T(module.Title);
-        var stack = new StackPanel { Spacing = 8 };
+        // The panel's tile proportions: one caption line, as the panel shows it at rest.
+        var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(Face(module));
-        stack.Children.Add(new TextBlock
+        var caption = new TextBlock
         {
             Text = title, FontSize = 12, TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis,
-        });
+            TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        ToolTipService.SetToolTip(caption, title);
+        stack.Children.Add(caption);
         // Focusable for keyboard menus, but never focused by a press: a dragged
         // view leaves the tree, and losing focus there must not scroll the panel.
         var body = new ContentControl

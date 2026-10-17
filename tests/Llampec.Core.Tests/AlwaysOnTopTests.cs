@@ -60,6 +60,17 @@ public sealed class AlwaysOnTopTests
             if (NotifyDuringMutation) Notify(identity.Handle);
             return !failed;
         }
+        public List<nint> Cleared = [];
+        /// <summary>The other application pins its window again as soon as it is cleared.</summary>
+        public bool Reassert;
+        public bool TryClearTopmost(WindowIdentity identity)
+        {
+            if (Claims.Contains(identity)) throw new Xunit.Sdk.XunitException("Cleared a window Llampec owns.");
+            if (Read(identity.Handle) is not { IsEligible: true, IsTopmost: true } window || window.Identity != identity) return false;
+            Cleared.Add(identity.Handle);
+            if (!Reassert) Items[identity.Handle] = window with { IsTopmost = false };
+            return !Reassert;
+        }
         /// <summary>Current alpha per window; absent means opaque and untouched.</summary>
         public Dictionary<nint, byte> Alpha = [];
         public bool FailOpacity, FailRestore;
@@ -260,21 +271,80 @@ public sealed class AlwaysOnTopTests
     }
 
     [Fact]
-    public void ExternalTopmostWindowsAreNeverClaimedOrUnpinned()
+    public void OtherAppPinsAreListedButNeverClaimedOrRestoredImplicitly()
     {
         var windows = new Windows();
         windows.Items[1] = windows.Items[1] with { IsTopmost = true };
         using var service = Create(windows);
-        Assert.DoesNotContain(service.GetWindows(), window => window.Handle == 1);
-        service.ToggleTarget();
-        Assert.Equal("This window is already kept on top by another application.", service.Error);
-        service.CaptureTarget(); // Showing the panel after a shortcut failure must retain the explanation.
-        Assert.NotNull(service.Error);
+        var listed = Assert.Single(service.GetWindows(), window => window.Handle == 1);
+        Assert.True(listed.IsPinned);
+        Assert.True(listed.PinnedByOtherApp);
+        Assert.Equal(1, service.OtherAppPinCount);
+        Assert.Equal(0, service.PinnedCount);
+        Assert.True(service.IsTargetPinnedByOtherApp);
+        // Unpinning Llampec's windows, module removal and exit leave other applications' pins alone.
         service.UnpinAll();
+        Assert.True(service.TryDeactivate());
         service.Dispose();
         Assert.True(windows.Items[1].IsTopmost);
         Assert.Empty(windows.Claims);
         Assert.Empty(windows.Mutations);
+        Assert.Empty(windows.Cleared);
+    }
+
+    [Fact]
+    public void ExplicitToggleClearsAnOtherAppPinWithoutClaimingIt()
+    {
+        var windows = new Windows();
+        windows.Items[1] = windows.Items[1] with { IsTopmost = true };
+        using var service = Create(windows);
+        var action = new AlwaysOnTopAction(service);
+        Assert.Equal(ActionState.On, action.State);
+
+        service.ToggleTarget();
+
+        Assert.Null(service.Error);
+        Assert.False(windows.Items[1].IsTopmost);
+        Assert.Equal([(nint)1], windows.Cleared);
+        Assert.Empty(windows.Claims);
+        Assert.Equal(0, service.PinnedCount);
+        Assert.False(service.IsTargetPinnedByOtherApp);
+        Assert.Equal(ActionState.Off, action.State);
+        // The next toggle is an ordinary Llampec pin again.
+        service.ToggleTarget();
+        Assert.Equal(1, service.PinnedCount);
+    }
+
+    [Fact]
+    public void RestoreAllClearsLlampecAndOtherAppPinsButNotShellWindows()
+    {
+        var windows = new Windows();
+        windows.Add(4, "Claude", process: 77, topmost: true);
+        windows.Add(5, "Taskbar", eligible: false, topmost: true);
+        using var service = Create(windows);
+        service.Toggle(Assert.Single(service.GetWindows(), w => w.Handle == 2).Handle);
+        Assert.Equal(1, service.PinnedCount);
+
+        service.RestoreAll();
+
+        Assert.Null(service.Error);
+        Assert.Equal(0, service.PinnedCount);
+        Assert.Equal(0, service.OtherAppPinCount);
+        Assert.False(windows.Items[2].IsTopmost);
+        Assert.False(windows.Items[4].IsTopmost);
+        Assert.True(windows.Items[5].IsTopmost);
+        Assert.Equal([(nint)4], windows.Cleared);
+    }
+
+    [Fact]
+    public void AppThatPinsItsWindowAgainIsReported()
+    {
+        var windows = new Windows { Reassert = true };
+        windows.Items[1] = windows.Items[1] with { IsTopmost = true };
+        using var service = Create(windows);
+        service.ToggleTarget();
+        Assert.Equal("The application keeps this window on top again. Change it in that application.", service.Error);
+        Assert.Empty(windows.Claims);
     }
 
     [Fact]

@@ -34,7 +34,7 @@ public class ThemeScheduleStatusTests
     {
         var plan = new ThemeSchedulePlan(false, Now.AddSeconds(seconds));
         Assert.Equal("Oscuro\nClaro en " + duration, ThemeScheduleStatus.Format(false, plan, Now, "es"));
-        Assert.Equal("Oscuro\n" + duration, ThemeScheduleStatus.Format(false, plan, Now, "es", compact: true));
+        Assert.Equal("Oscuro · " + duration, ThemeScheduleStatus.Format(false, plan, Now, "es", compact: true));
     }
 
     [Theory]
@@ -48,10 +48,10 @@ public class ThemeScheduleStatusTests
     }
 
     [Theory]
-    [InlineData("en", "Light\n4 h 27 min")]
-    [InlineData("es", "Claro\n4 h 27 min")]
-    [InlineData("ca", "Clar\n4 h 27 min")]
-    public void Visible_tile_uses_two_compact_lines(string language, string expected)
+    [InlineData("en", "Light · 4 h 27 min")]
+    [InlineData("es", "Claro · 4 h 27 min")]
+    [InlineData("ca", "Clar · 4 h 27 min")]
+    public void Visible_tile_uses_one_compact_line(string language, string expected)
     {
         var plan = new ThemeSchedulePlan(true, Now.AddMinutes(267));
         Assert.Equal(expected, ThemeScheduleStatus.Format(true, plan, Now, language, compact: true));

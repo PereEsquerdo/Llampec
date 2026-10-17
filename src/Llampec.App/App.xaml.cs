@@ -31,6 +31,8 @@ public partial class App : Application
     private RotationAction? _rotationAction;
     private Actions.Mouse.MouseAction? _mouseAction;
     private Actions.Camera.CameraAction? _cameraAction;
+    private Actions.Monitor.MonitorAction? _monitorAction;
+    private ExternalMonitorService? _externalMonitors;
     private ConfigurableHotkey? _alwaysOnTopHotkey;
     private ConfigurableHotkey? _fullscreenHotkey;
     private DispatcherQueueTimer? _fullscreenTimer;
@@ -43,6 +45,39 @@ public partial class App : Application
     public FullscreenService? Fullscreen { get; private set; }
     public LogitechMouseService? LogitechMouse { get; private set; }
     public DisplayOrientationService? Rotation { get; private set; }
+    public Actions.AgentMode.AgentModeAction? AgentMode { get; private set; }
+    /// <summary>Shared by the monitor and agent-mode modules. It holds no handles or threads while idle.</summary>
+    public ExternalMonitorService ExternalMonitors => _externalMonitors ??= new();
+    public MonitorRecovery MonitorRecovery => _monitorRecovery ??= new(ExternalMonitors);
+    private MonitorRecovery? _monitorRecovery;
+    private CancellationTokenSource? _monitorCheck;
+
+    /// <summary>Time for monitors to wake normally before checking that none stayed without a signal.</summary>
+    private static readonly TimeSpan MonitorCheckDelay = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// One check, a few seconds after Windows turns the screen on, for a monitor that stayed in
+    /// no-signal standby (for example a USB4 dock after Modern Standby). Cancelled if the screen
+    /// turns off again; nothing runs otherwise.
+    /// </summary>
+    private void ScheduleMonitorCheck()
+    {
+        _monitorCheck?.Cancel();
+        if (_exiting || _monitorAction is null || !Settings.Monitor.RecoverAfterWake || AgentMode?.IsActive == true) return;
+        var cancel = _monitorCheck = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(MonitorCheckDelay, cancel.Token);
+                if (cancel.IsCancellationRequested || AgentMode?.IsActive == true) return;
+                var result = await MonitorRecovery.RecoverAsync(force: false);
+                if (result != MonitorRecoveryResult.NothingToDo) Log.Info($"Automatic monitor recovery: {result}");
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { Log.Warn($"Automatic monitor recovery failed: {error.Message}"); }
+        });
+    }
     public string? AlwaysOnTopHotkeyError => _alwaysOnTopHotkey?.Error;
     public string? FullscreenHotkeyError => _fullscreenHotkey?.Error;
 
@@ -96,6 +131,10 @@ public partial class App : Application
             foreach (var module in ModuleCatalog.All)
                 if (!Settings.DisabledModules.Contains(module.Id)) EnableModule(module.Id);
             _events.Suspending += (_, _) => _caffeine?.Stop();
+            _events.Suspending += (_, _) => _ = AgentMode?.StopAsync("suspend");
+            _events.DisplayChanged += (_, _) => AgentMode?.OnDisplayChanged();
+            _events.DisplayTurnedOn += (_, _) => ScheduleMonitorCheck();
+            _events.DisplayTurnedOff += (_, _) => _monitorCheck?.Cancel();
             _events.ClockChanged += (_, _) => _caffeine?.Refresh();
             var model = new FlyoutViewModel(CurrentActions(), Settings);
             _model = model;
@@ -334,6 +373,11 @@ public partial class App : Application
         catch (Exception ex) { Log.Error("Logitech shutdown could not complete restoration; recovery is retained for the next launch.", ex); }
         _mouseAction?.Dispose();
         _cameraAction?.Dispose();
+        // Restores the displays and power settings while the dispatcher still pumps.
+        try { if (AgentMode is { } agentMode) await agentMode.StopAsync("exit"); }
+        catch (Exception ex) { Log.Error("Agent mode could not restore every setting on exit.", ex); }
+        AgentMode?.Dispose();
+        _externalMonitors?.Dispose();
         Scheduler?.Dispose();
         _alwaysOnTopHotkey?.Dispose();
         _alwaysOnTopAction?.Dispose();

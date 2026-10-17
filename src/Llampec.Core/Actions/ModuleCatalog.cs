@@ -9,7 +9,7 @@ public static class ModuleCatalog
     public static IReadOnlyList<ModuleDescriptor> All { get; } = Array.AsReadOnly<ModuleDescriptor>(
     [
         new("hdr", "HDR", "\uE7A1", null, true),
-        new("display-off", "Turn off display", "\uE7F4", null, false),
+        new("display-off", "Turn off displays", "\uE7F4", null, true),
         new("theme", "Dark mode", "\uE706", "\uE708", true),
         new("projection", "Multiple displays", "\uEBC6", null, true),
         new("taskbar-autohide", "Auto-hide taskbar", "\uE90E", null, false),
@@ -24,5 +24,7 @@ public static class ModuleCatalog
         new("camera", "Camera", "\uE722", null, false),
         new("touch-keyboard", "Touch keyboard", "\uE765", null, true),
         new("touchpad", "Virtual touchpad", "\uEFA5", null, true),
+        new("monitor", "External monitor", "\uE706", null, true),
+        new("agent-mode", "Agentic work", "\uE99A", null, true),
     ]);
 }

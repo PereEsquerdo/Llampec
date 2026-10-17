@@ -82,6 +82,12 @@ public partial class App
                 action = _mouseAction = new Actions.Mouse.MouseAction(LogitechMouse, () => Settings.Logitech, SetLogitechEnabledAsync);
                 _ = StartLogitechMouseAsync();
                 break;
+            case "monitor": action = _monitorAction = new Actions.Monitor.MonitorAction(ExternalMonitors, recovery: MonitorRecovery); break;
+            case "agent-mode":
+                action = AgentMode = new Actions.AgentMode.AgentModeAction(() => Settings.AgentMode,
+                    new Actions.AgentMode.AgentModePlatform(ExternalMonitors));
+                _ = AgentMode.RecoverAsync();
+                break;
             case "camera":
                 action = _cameraAction = new Actions.Camera.CameraAction();
                 if (_window?.AppWindow.IsVisible == true) _cameraAction.SetObserving(true);
@@ -126,6 +132,12 @@ public partial class App
         _window?.OnFullscreenChanged();
     }
 
+    private async Task<bool> StopAgentModeAsync()
+    {
+        if (AgentMode is { } mode) await mode.StopAsync("module removed");
+        return true;
+    }
+
     private async Task<bool> PrepareModuleRemovalAsync(string id)
     {
         return id switch
@@ -134,6 +146,7 @@ public partial class App
             "fullscreen" => Fullscreen?.TryDeactivate() != false,
             "rotation" => Rotation is null || await Rotation.TryDeactivateAsync(),
             "mouse" => await ReleaseLogitechMouseAsync(),
+            "agent-mode" => await StopAgentModeAsync(),
             _ => true
         };
     }
@@ -210,6 +223,8 @@ public partial class App
                 }
                 break;
             case "camera": _cameraAction?.Dispose(); _cameraAction = null; break;
+            case "monitor": _monitorAction?.Dispose(); _monitorAction = null; break;
+            case "agent-mode": AgentMode?.Dispose(); AgentMode = null; break;
             case "touch-taskbar":
                 if (action is not null) action.Changed -= OnTouchTaskbarChanged;
                 break;

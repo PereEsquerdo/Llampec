@@ -19,6 +19,9 @@ public sealed class SystemEvents : IDisposable
     private readonly User32.WndProc _wndProc; // kept alive: the OS holds a raw pointer to it
     private readonly uint _taskbarCreatedMessage;
     private readonly nint _hidNotification;
+    private readonly nint _displayNotification;
+    private static readonly Guid ConsoleDisplayState = new("6fe69556-704a-47a0-8f24-c28d936fda47");
+    private bool _consoleDisplayOff;
     private bool _disposed;
 
     public SystemEvents()
@@ -67,6 +70,9 @@ public sealed class SystemEvents : IDisposable
         };
         _hidNotification = RegisterDeviceNotificationW(Handle, ref hidFilter, 0);
         if (_hidNotification == 0) Log.Warn("HID device arrival notifications could not be registered.");
+        Guid displayState = ConsoleDisplayState;
+        _displayNotification = RegisterPowerSettingNotification(Handle, ref displayState, 0);
+        if (_displayNotification == 0) Log.Warn("Display state notifications could not be registered.");
     }
 
     public nint Handle { get; }
@@ -79,6 +85,12 @@ public sealed class SystemEvents : IDisposable
     /// <summary>Windows has committed to ending this session (not merely queried or cancelled shutdown).</summary>
     public event EventHandler? SessionEnding;
     public event EventHandler<string?>? HidDeviceChanged;
+
+    /// <summary>Windows turned the console display back on after turning it off (idle timeout or standby).</summary>
+    public event EventHandler? DisplayTurnedOn;
+
+    /// <summary>Windows turned the console display off.</summary>
+    public event EventHandler? DisplayTurnedOff;
 
     /// <summary>A system setting changed (WM_SETTINGCHANGE). The argument is the section name, e.g. "ImmersiveColorSet".</summary>
     public event EventHandler<string?>? SettingChanged;
@@ -118,6 +130,17 @@ public sealed class SystemEvents : IDisposable
                     ClockChanged?.Invoke(this, EventArgs.Empty);
                     return 0;
                 case 0x0218: // WM_POWERBROADCAST: resume from sleep/hibernate
+                    if (wParam == 0x8013 && lParam != 0) // PBT_POWERSETTINGCHANGE
+                    {
+                        // POWERBROADCAST_SETTING: GUID, DWORD length, data. Display state: 0 off, 1 on, 2 dimmed.
+                        if (Marshal.PtrToStructure<Guid>(lParam) == ConsoleDisplayState && Marshal.ReadInt32(lParam, 16) >= 4)
+                        {
+                            int state = Marshal.ReadInt32(lParam, 20);
+                            if (state == 0 && !_consoleDisplayOff) { _consoleDisplayOff = true; DisplayTurnedOff?.Invoke(this, EventArgs.Empty); }
+                            else if (state == 1 && _consoleDisplayOff) { _consoleDisplayOff = false; DisplayTurnedOn?.Invoke(this, EventArgs.Empty); }
+                        }
+                        return 1;
+                    }
                     if (wParam == 0x0004) Suspending?.Invoke(this, EventArgs.Empty);
                     if (wParam is 0x0007 or 0x0012)
                     {
@@ -178,6 +201,7 @@ public sealed class SystemEvents : IDisposable
 
         _disposed = true;
         if (_hidNotification != 0) UnregisterDeviceNotification(_hidNotification);
+        if (_displayNotification != 0) UnregisterPowerSettingNotification(_displayNotification);
         User32.DestroyWindow(Handle);
         // Allow a later instance (tests, or a future restart-in-place) to register the class again.
         User32.UnregisterClass(ClassName, Kernel32.GetModuleHandle(null));
@@ -199,6 +223,11 @@ public sealed class SystemEvents : IDisposable
     [DllImport("user32.dll", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterDeviceNotification(nint notification);
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern nint RegisterPowerSettingNotification(nint recipient, ref Guid setting, uint flags);
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterPowerSettingNotification(nint handle);
 }
 
 /// <summary>Tray icon callback data. <see cref="Message"/> is a WM_* mouse message or NIN_* value.</summary>

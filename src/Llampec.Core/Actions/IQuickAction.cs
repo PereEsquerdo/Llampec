@@ -3,7 +3,7 @@ namespace Llampec.Actions;
 /// <summary>How a tile behaves and is drawn.</summary>
 public enum ActionKind
 {
-    /// <summary>Fire-and-forget button (e.g. "Turn off display"). Has no persistent state.</summary>
+    /// <summary>Fire-and-forget button (e.g. "Screenshot"). Has no persistent state.</summary>
     Button,
 
     /// <summary>Two-state switch drawn as a single tile (e.g. "Dark mode").</summary>

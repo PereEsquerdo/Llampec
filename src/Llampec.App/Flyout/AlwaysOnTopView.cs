@@ -27,6 +27,7 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
     };
     private readonly TextBlock _empty = Note("No windows available.");
     private readonly Button _unpinAll = new() { Content = UiText.Get("Unpin all") };
+    private readonly Button _restoreAll = new() { Content = UiText.Get("Restore all") };
     private readonly AppearanceEditor _appearance;
     private readonly TextBlock _appearanceError = Note("");
     private readonly StackPanel _perWindow = new() { Spacing = 8 };
@@ -82,8 +83,13 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
         ToolTipService.SetToolTip(refresh, UiText.Get("Refresh windows"));
         refresh.Click += (_, _) => RefreshWindows();
         _unpinAll.Click += (_, _) => { _restartError = null; _service.UnpinAll(); UpdateWindows(); };
+        _restoreAll.Click += (_, _) => { _restartError = null; _service.RestoreAll(); UpdateWindows(); };
+        string restoreHelp = UiText.Get("Removes Always on Top from every app window, including those pinned by other apps.");
+        ToolTipService.SetToolTip(_restoreAll, restoreHelp);
+        AutomationProperties.SetHelpText(_restoreAll, restoreHelp);
         buttons.Children.Add(refresh);
         buttons.Children.Add(_unpinAll);
+        buttons.Children.Add(_restoreAll);
         Children.Add(buttons);
 
         Children.Add(Section("Appearance", topMargin: 6));
@@ -161,16 +167,19 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
                 _rows.Add(handle, row);
             }
             row.Title.Text = window.Title;
-            row.Button.IsChecked = window.IsPinned;
+            row.Button.IsChecked = window.IsPinned && !window.PinnedByOtherApp;
             row.Pin.Opacity = window.IsPinned ? 1 : .35;
+            row.Detail.Visibility = window.PinnedByOtherApp ? Visibility.Visible : Visibility.Collapsed;
             string operation = UiText.Format(window.IsPinned ? "Unpin: {0}" : "Pin: {0}", window.Title);
             AutomationProperties.SetName(row.Button, operation);
             ToolTipService.SetToolTip(row.Button, operation);
             Place(_windows, row.Button, index);
         }
 
-        _count.Text = UiText.Format("{0} pinned", _service.PinnedCount);
+        _count.Text = _service.OtherAppPinCount == 0 ? UiText.Format("{0} pinned", _service.PinnedCount)
+            : UiText.Format("{0} pinned · {1} by other apps", _service.PinnedCount, _service.OtherAppPinCount);
         _unpinAll.IsEnabled = _service.PinnedCount > 0;
+        _restoreAll.IsEnabled = _service.PinnedCount + _service.OtherAppPinCount > 0;
         _empty.Visibility = available.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_service.Error != AdministratorRestart.PermissionError) _restartError = null;
         SetMessage(_windowError, _restartError ?? _service.Error);
@@ -332,6 +341,11 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
             FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        public TextBlock Detail { get; } = new()
+        {
+            Text = UiText.Get("Pinned by another app"), FontSize = 11, Opacity = .75,
+            TextTrimming = TextTrimming.CharacterEllipsis, Visibility = Visibility.Collapsed,
+        };
         public FontIcon Pin { get; } = new()
         {
             Glyph = "\uE718", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16,
@@ -344,7 +358,10 @@ public sealed class AlwaysOnTopView : StackPanel, IDisposable
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             Grid.SetColumn(Pin, 1);
-            content.Children.Add(Title);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(Title);
+            text.Children.Add(Detail);
+            content.Children.Add(text);
             content.Children.Add(Pin);
             Button.Content = content;
         }
