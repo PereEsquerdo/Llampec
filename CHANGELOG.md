@@ -4,7 +4,11 @@
 
 - Agentic work hides the taskbar automatically while it covers a display, and shows
   it again on exit: the taskbar, also topmost, stayed lit above the cover on a
-  single OLED display. The pointer now rests in the cover's top-right pixel.
+  single OLED display. If the taskbar has focus, which keeps it showing, focus moves to
+  the topmost app. The pointer is hidden on a small window of its own, so no app shows
+  hover effects or tooltips under it.
+- The Windows App SDK components follow an official release (2.5.1): CI checks that
+  they match it, and a weekly workflow reports a newer release.
 - Maintenance: CI actions off the deprecated Node.js 20 (`checkout@v7`,
   `setup-dotnet@v6`, `upload-artifact@v7`), tests on xUnit v3 with
   Microsoft.Testing.Platform, Windows App SDK WinUI 2.3.9 and Foundation 2.3.12,

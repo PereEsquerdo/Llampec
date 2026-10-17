@@ -33,9 +33,11 @@ public sealed class AgentModeTests
         public FeatureValue? Read(DdcMonitor monitor, MonitorFeature feature) =>
             !FailReads && Values.TryGetValue((monitor.Key, feature), out uint value)
                 ? new(value, feature == MonitorFeature.Power ? 4u : 100u) : null;
+        /// <summary>Completed when a write is waiting at <see cref="WriteGate"/>.</summary>
+        public readonly TaskCompletionSource WriteStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Write(DdcMonitor monitor, MonitorFeature feature, uint value)
         {
-            WriteGate?.Task.Wait();
+            if (WriteGate is { } gate) { WriteStarted.TrySetResult(); gate.Task.Wait(); }
             lock (Writes) Writes.Add((monitor.Name, feature, value));
             Values[(monitor.Key, feature)] = value;
             return true;
@@ -52,6 +54,10 @@ public sealed class AgentModeTests
         public void Input() => PhysicalInput?.Invoke(this, EventArgs.Empty);
         public void Wake() => DisplayTurnedOn?.Invoke(this, EventArgs.Empty);
         public void Dispose() => Disposed = true;
+        public (int X, int Y)? Parked;
+        public int LeftTaskbar;
+        public void Park(int x, int y) => Parked = (x, y);
+        public void LeaveTaskbar() => LeftTaskbar++;
     }
 
     internal sealed class FakePlatform : IAgentModePlatform
@@ -66,7 +72,7 @@ public sealed class AgentModeTests
         public bool RequestReleased;
         public FakeScreen? Screen;
         public AgentModeRecovery? Recovery;
-        public (int X, int Y)? Cursor;
+
         public bool FailTopology;
 
         public FakePlatform(FakeMonitors? ddc = null)
@@ -116,7 +122,7 @@ public sealed class AgentModeTests
             return result;
         }
         public IAgentScreen CreateScreen() { Log.Add("screen"); return Screen = new FakeScreen(); }
-        public void ParkCursor(int x, int y) => Cursor = (x, y);
+
         /// <summary>Null stands for the tablet taskbar, which ignores auto-hide.</summary>
         public bool? AutoHide = false;
         public bool? TaskbarAutoHide() => AutoHide;
@@ -144,7 +150,7 @@ public sealed class AgentModeTests
         Assert.Equal(4u, platform.Ddc.Values[(platform.Ddc.Monitors[0].Key, MonitorFeature.Power)]);
         // Every lit display is dark by other means: nothing to cover; the pointer rests on the sleeping monitor.
         Assert.Empty(platform.Screen!.Covered);
-        Assert.Equal((4000, 500), platform.Cursor);
+        Assert.Equal((4000, 500), platform.Screen.Parked);
         Assert.Equal(["awake", "topology External", "PHL 329M1RV off", "screen"], platform.Log);
         Assert.Equal(ProjectionTopology.Extend, platform.Recovery!.Topology);
         Assert.Equal(["PHL 329M1RV"], platform.Recovery.Monitors);
@@ -181,9 +187,12 @@ public sealed class AgentModeTests
 
         Assert.Equal(ProjectionTopology.Extend, platform.Current);
         Assert.Equal([@"\\.\DISPLAY1"], platform.Screen!.Covered);
-        // Top-right pixel: the pointer is almost entirely off screen, away from the hidden taskbar's edge.
-        Assert.Equal((1999, 0), platform.Cursor);
+        // Hidden on the top edge, away from the edge that would reveal the hidden taskbar.
+        Assert.Equal((1000, 4), platform.Screen.Parked);
         Assert.True(platform.AutoHide);
+        Assert.Equal(1, platform.Screen.LeftTaskbar); // a focused taskbar would not hide
+        mode.OnDisplayChanged();
+        Assert.Equal(1, platform.Screen.LeftTaskbar); // only right after the tap that started the mode
         await mode.StopAsync("test");
         Assert.True(platform.RequestReleased);
     }
@@ -230,7 +239,8 @@ public sealed class AgentModeTests
 
         Assert.Equal(["awake", "screen"], platform.Log);
         Assert.Empty(platform.Screen!.Covered);
-        Assert.Null(platform.Cursor);
+        Assert.Null(platform.Screen.Parked);
+        Assert.Equal(0, platform.Screen.LeftTaskbar);
     }
 
     [Fact]
@@ -365,7 +375,7 @@ public sealed class AgentModeTests
         public Task<IReadOnlyList<MonitorStatus>> MonitorsAsync() => Task.FromResult<IReadOnlyList<MonitorStatus>>([]);
         public Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> monitors, bool on) => Task.FromResult<IReadOnlyList<DdcMonitor>>([]);
         public IAgentScreen CreateScreen() => throw new NotSupportedException();
-        public void ParkCursor(int x, int y) { }
+
         public bool? TaskbarAutoHide() => null;
         public void SetTaskbarAutoHide(bool hide) => throw new NotSupportedException();
         public AgentModeRecovery? LoadRecovery() => null;
@@ -415,7 +425,8 @@ public sealed class ExternalMonitorTests
         ddc.WriteGate = new TaskCompletionSource();
 
         service.Set(monitor, MonitorFeature.Brightness, 10);
-        await Task.Delay(50, TestContext.Current.CancellationToken); // the first write is now blocked on the bus
+        // Wait until the first write is actually blocked on the bus, not for a guessed time.
+        await ddc.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         for (uint value = 11; value <= 30; value++) service.Set(monitor, MonitorFeature.Brightness, value);
         Assert.Equal(30u, service.Monitors[0].Brightness!.Value.Current); // shown at once
         ddc.WriteGate.SetResult();

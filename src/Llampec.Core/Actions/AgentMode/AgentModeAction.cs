@@ -41,6 +41,7 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
         public IAgentScreen? Screen { get; set; }
         /// <summary>Auto-hide was turned on so that the taskbar, itself topmost, cannot rise above a cover.</summary>
         public bool HidTaskbar { get; set; }
+        public bool LeftTaskbar { get; set; }
         public AgentModeRecovery? Recovery { get; set; }
     }
 
@@ -247,12 +248,18 @@ public sealed class AgentModeAction : QuickActionBase, IDisposable
             session.HidTaskbar = true;
             if (session.Recovery is { } recovery) Try(() => _platform.SaveRecovery(session.Recovery = recovery with { HideTaskbar = true }));
         }
-        // A still pointer would mark an OLED; leave it on a monitor in standby, or in a covered top corner,
-        // away from the bottom edge, which would reveal the hidden taskbar.
+        // A focused taskbar does not hide; this applies to the first covering only, right after the tap.
+        if (session.HidTaskbar && !session.LeftTaskbar)
+        {
+            session.LeftTaskbar = true;
+            Try(() => session.Screen?.LeaveTaskbar());
+        }
+        // Hide the pointer: on a monitor in standby, or on a covered display's top edge, away from the bottom
+        // edge, which would reveal the hidden taskbar.
         if (displays.FirstOrDefault(d => dark.Contains(d.DeviceName)) is { } standby)
-            _platform.ParkCursor((standby.Bounds.Left + standby.Bounds.Right) / 2, (standby.Bounds.Top + standby.Bounds.Bottom) / 2);
+            session.Screen?.Park((standby.Bounds.Left + standby.Bounds.Right) / 2, (standby.Bounds.Top + standby.Bounds.Bottom) / 2);
         else if (session.Settings.CoverDisplays && lit.Length > 0)
-            _platform.ParkCursor(lit[0].Bounds.Right - 1, lit[0].Bounds.Top);
+            session.Screen?.Park((lit[0].Bounds.Left + lit[0].Bounds.Right) / 2, lit[0].Bounds.Top + 4);
     }
 
     private void OnPhysicalInput(object? sender, EventArgs e) => _ = StopAsync("local input");

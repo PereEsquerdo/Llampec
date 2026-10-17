@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+      - name: Windows App SDK components form one release
+        run: ./tools/check-windowsappsdk.ps1
       - name: Test without changing the desktop or display topology
         run: dotnet test --project tests/Llampec.Core.Tests -c Release --filter-not-class Llampec.Tests.SystemActionTests --filter-not-class Llampec.Tests.HdrDisplaysTests --filter-not-class Llampec.Tests.ProjectionModesTests
       # Run locally on hardware; CI only keeps them compiling with Core.

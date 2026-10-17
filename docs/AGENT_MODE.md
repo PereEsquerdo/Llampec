@@ -46,10 +46,17 @@ Llampec restores everything at the sign-in screen.
   agent mode therefore turns on **Automatically hide the taskbar** (the same
   `ABM_SETSTATE` as the Auto-hide taskbar button) and turns it off again on exit,
   unless it was already on or the user turned it off meanwhile. The tablet taskbar
-  ignores that setting and is left alone. The change is in the recovery record.
-- **Pointer.** A still pointer marks an OLED. It is parked on a monitor in standby,
-  or in the top-right pixel of a covered display, away from the bottom edge that
-  would reveal the hidden taskbar.
+  ignores that setting and is left alone. The change is in the recovery record. An
+  auto-hidden taskbar stays out while it has focus, which is where Windows returns
+  focus after the panel opened from the taskbar icon closes; agent mode then activates
+  the topmost application window. Llampec may do so because it received the tap.
+- **Pointer.** A still pointer marks an OLED, and over another window it shows that
+  window's hover effects: parked in a top corner, it lit a maximized window's red Close
+  button and its tooltip. The pointer now rests on a small black window of agent mode's
+  own (8×8 px, excluded from capture, never activated) that answers `WM_SETCURSOR` with
+  no cursor, so nothing is drawn: on a monitor in standby, or at the middle of a covered
+  display's top edge, away from the bottom edge that would reveal the hidden taskbar.
+  Moving the mouse away, as an agent or remote tool does, restores the normal pointer.
 - **A single built-in display.** It cannot be switched off while Windows keeps the
   session awake: Windows needs one active display, and turning the screen off on
   demand enters standby (see [caffeine](CAFFEINE.md)). Agent mode covers it with
@@ -90,7 +97,12 @@ the mode. The Philips' own power button is no way out of its DDC/CI standby: it
 switches the monitor off and on, but it stays without a signal until Llampec wakes
 it. With only the built-in display, the taskbar showed above the cover; it is now
 hidden automatically (an end-to-end run turned auto-hide on and back off, with all
-twelve visible windows in place and no recovery file left).
+twelve visible windows in place and no recovery file left). The user then found the
+taskbar still showing, and a parked pointer lighting a Close button and its tooltips.
+Reproduced by focusing the taskbar, opening the panel and pressing the tile: with the
+fixes the taskbar moved off screen (top 1776 → 1918 px, its 2 px auto-hide strip), focus
+went to the topmost app, and the pointer was hidden over the parking window; exit
+restored the taskbar and the pointer.
 
 Not yet verified by hand: the locking variant (display off by timeout, then wake at
 the sign-in screen); a single built-in display covered for a long run; consumption

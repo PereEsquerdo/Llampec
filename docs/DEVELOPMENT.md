@@ -50,6 +50,23 @@ deprecated Node.js 20 (`checkout@v7`, `setup-dotnet@v6`, `upload-artifact@v7`), 
 tests from xUnit 2 to xUnit v3 on Microsoft.Testing.Platform, and the Windows App SDK
 to its latest 2.3 patches.
 
+### Windows App SDK releases
+
+Llampec references three Windows App SDK components (WinUI, Foundation,
+InteractiveExperiences) rather than the `Microsoft.WindowsAppSDK` metapackage, whose AI,
+ML, Search and Widgets binaries would add about 40 MB. The metapackage still defines which
+component versions make up an official release, and the components' own packages can
+disagree with it: WinUI 2.3.9 asks for InteractiveExperiences 2.1.8, which was never
+published, while release 2.5.1 declares 2.1.9.
+
+So the app follows an official release, named in `<WindowsAppSdkRelease>` in
+`Llampec.App.csproj`. `tools/check-windowsappsdk.ps1` downloads that release's manifest
+from NuGet and fails when any component differs; CI runs it on every push. The weekly
+**Dependencies** workflow runs it with `-RequireLatest`, failing (and so notifying) when
+Microsoft publishes a newer stable release; its message lists the component versions to
+use. Dependabot ignores these components so that it never mixes releases. To update,
+change the release and the three versions together, then build and test.
+
 ## Tests
 
 The tests use xUnit v3 on Microsoft.Testing.Platform, selected for `dotnet test` in

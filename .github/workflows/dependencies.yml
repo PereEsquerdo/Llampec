@@ -1,0 +1,19 @@
+name: Dependencies
+
+# Weekly check that complements Dependabot: the Windows App SDK components follow official releases,
+# which Dependabot cannot track, so this run fails (and GitHub notifies) when a newer release exists.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-app-sdk:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Windows App SDK is the latest release
+        run: ./tools/check-windowsappsdk.ps1 -RequireLatest

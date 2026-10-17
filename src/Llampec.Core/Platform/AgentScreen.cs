@@ -9,6 +9,15 @@ public interface IAgentScreen : IDisposable
     /// <summary>Replaces the black covers with one per display in <paramref name="displays"/>.</summary>
     void Cover(IReadOnlyList<ActiveDisplay> displays);
 
+    /// <summary>
+    /// Moves the pointer onto a small window of this screen centred on (<paramref name="x"/>, <paramref name="y"/>),
+    /// where it is not drawn and no application beneath shows hover effects or tooltips.
+    /// </summary>
+    void Park(int x, int y);
+
+    /// <summary>When the taskbar is the foreground window, activates the topmost application window instead.</summary>
+    void LeaveTaskbar();
+
     /// <summary>A key, button, wheel, deliberate mouse movement, touch, pen or touchpad contact from a physical device.</summary>
     event EventHandler? PhysicalInput;
 
@@ -27,6 +36,10 @@ public interface IAgentScreen : IDisposable
 /// input synthesized with SendInput, as agents and remote tools do, has no device and is ignored.</item>
 /// <item>GUID_CONSOLE_DISPLAY_STATE, to notice Windows turning the screen back on, for example at the
 /// sign-in screen, where this desktop's raw input is not delivered.</item>
+/// <item>A pointer parking window. A still pointer would mark an OLED, and over another window it shows
+/// that window's hover effects and tooltips (a red Close button, for one). Over this small black window,
+/// which answers WM_SETCURSOR with no cursor and does not activate, nothing is drawn. Moving the mouse
+/// away, as an agent or remote tool does, restores the normal pointer.</item>
 /// </list>
 /// </summary>
 public sealed class AgentScreen : IAgentScreen
@@ -40,6 +53,7 @@ public sealed class AgentScreen : IAgentScreen
     private readonly nint _powerNotification;
     private readonly nint _foregroundHook;
     private readonly List<nint> _covers = [];
+    private nint _park;
     private readonly long _ignoreInputUntil;
     private bool _inputRegistered;
     private bool _displayWasOff;
@@ -128,12 +142,71 @@ public sealed class AgentScreen : IAgentScreen
 
     /// <summary>TOPMOST | TOOLWINDOW | LAYERED | TRANSPARENT | NOACTIVATE.</summary>
     private const uint ExtendedCoverStyle = 0x8 | 0x80 | 0x80000 | 0x20 | 0x08000000;
+    /// <summary>TOPMOST | TOOLWINDOW | NOACTIVATE: hit-testable, unlike a cover.</summary>
+    private const uint ExtendedParkStyle = 0x8 | 0x80 | 0x08000000;
     private const uint Popup = 0x80000000;
+    private const int ParkSize = 8;
+
+    public void Park(int x, int y)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        int left = x - ParkSize / 2, top = y - ParkSize / 2;
+        if (_park == 0)
+        {
+            _park = User32.CreateWindowEx(ExtendedParkStyle, ClassName, "", Popup, left, top, ParkSize, ParkSize, 0, 0,
+                Kernel32.GetModuleHandle(null), 0);
+            if (_park == 0) Log.Warn($"Pointer parking window failed: {Marshal.GetLastPInvokeError()}");
+            else
+            {
+                SetWindowDisplayAffinity(_park, 0x11); // WDA_EXCLUDEFROMCAPTURE
+                ShowWindow(_park, 4); // SW_SHOWNOACTIVATE
+            }
+        }
+        else User32.SetWindowPos(_park, -1, left, top, ParkSize, ParkSize, User32.SWP_NOACTIVATE);
+        SetCursorPos(x, y);
+    }
+
+    public void LeaveTaskbar()
+    {
+        if (!IsTaskbar(User32.GetForegroundWindow())) return;
+        // An auto-hidden taskbar stays out while it has focus, as after opening the panel from its icon.
+        // Llampec received the tap that started the mode, so Windows lets it choose the foreground window.
+        uint self = (uint)Environment.ProcessId;
+        nint target = 0;
+        _ = EnumWindows((window, _) =>
+        {
+            if (!IsApplicationWindow(window, self)) return true;
+            target = window;
+            return false;
+        }, 0);
+        if (target == 0 || !User32.SetForegroundWindow(target)) Log.Warn("Agent mode could not move focus away from the taskbar.");
+    }
+
+    private static bool IsTaskbar(nint window) => ClassOf(window) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd";
+
+    /// <summary>A visible, restored, uncloaked top-level window of another process that can be activated.</summary>
+    private static bool IsApplicationWindow(nint window, uint self)
+    {
+        if (!IsWindowVisible(window) || IsIconic(window) || GetWindowTextLength(window) == 0) return false;
+        if (GetWindowThreadProcessId(window, out uint process) == 0 || process == self) return false;
+        long style = User32.GetWindowLongPtr(window, User32.GWL_EXSTYLE);
+        if ((style & (0x80 | 0x08000000)) != 0) return false; // WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE
+        if (DwmGetWindowAttribute(window, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return false; // DWMWA_CLOAKED
+        return !ShellSurfaces.IsShellClass(ClassOf(window));
+    }
+
+    private static string ClassOf(nint window)
+    {
+        var name = new System.Text.StringBuilder(256);
+        return GetClassName(window, name, name.Capacity) > 0 ? name.ToString() : "";
+    }
 
     private void Raise()
     {
         foreach (nint cover in _covers)
             User32.SetWindowPos(cover, -1, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
+        if (_park != 0)
+            User32.SetWindowPos(_park, -1, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
     }
 
     private nint WindowProcedure(nint hWnd, uint msg, nuint wParam, nint lParam)
@@ -155,7 +228,9 @@ public sealed class AgentScreen : IAgentScreen
                 }
                 return 1;
             }
-            else if (msg == 0x0084 && hWnd != _host) return -1; // WM_NCHITTEST: HTTRANSPARENT
+            else if (msg == 0x0020 && hWnd == _park) { SetCursor(0); return 1; } // WM_SETCURSOR: no pointer
+            else if (msg == 0x0021 && hWnd == _park) return 3; // WM_MOUSEACTIVATE: MA_NOACTIVATE
+            else if (msg == 0x0084 && hWnd != _host && hWnd != _park) return -1; // WM_NCHITTEST: HTTRANSPARENT
         }
         catch (Exception error) { Log.Error("Agent mode window failed", error); }
         return User32.DefWindowProc(hWnd, msg, wParam, lParam);
@@ -191,6 +266,12 @@ public sealed class AgentScreen : IAgentScreen
         finally { Marshal.FreeHGlobal(buffer); }
     }
 
+    private void RemovePark()
+    {
+        if (_park != 0) User32.DestroyWindow(_park);
+        _park = 0;
+    }
+
     private void RemoveCovers()
     {
         foreach (nint cover in _covers) User32.DestroyWindow(cover);
@@ -202,6 +283,7 @@ public sealed class AgentScreen : IAgentScreen
         if (_disposed) return;
         _disposed = true;
         RemoveCovers();
+        RemovePark();
         if (_foregroundHook != 0) UnhookWinEvent(_foregroundHook);
         if (_powerNotification != 0) UnregisterPowerSettingNotification(_powerNotification);
         if (_inputRegistered)
@@ -274,4 +356,27 @@ public sealed class AgentScreen : IAgentScreen
     private static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("gdi32.dll")]
     private static extern nint GetStockObject(int index);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")]
+    private static extern nint SetCursor(nint cursor);
+    private delegate bool EnumWindowsProc(nint window, nint data);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, nint data);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(nint window);
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(nint window);
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint window, out uint process);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(nint window, System.Text.StringBuilder name, int capacity);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
 }

@@ -23,7 +23,6 @@ public interface IAgentModePlatform
     Task<IReadOnlyList<MonitorStatus>> MonitorsAsync();
     Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> monitors, bool on);
     IAgentScreen CreateScreen();
-    void ParkCursor(int x, int y);
     /// <summary>Whether the taskbar hides automatically; null with the tablet taskbar, which ignores it.</summary>
     bool? TaskbarAutoHide();
     void SetTaskbarAutoHide(bool hide);
@@ -61,7 +60,6 @@ public sealed class AgentModePlatform(ExternalMonitorService monitors) : IAgentM
 
     public Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> targets, bool on) => monitors.SetPowerAsync(targets, on);
     public IAgentScreen CreateScreen() => new AgentScreen(TimeSpan.FromSeconds(1));
-    public void ParkCursor(int x, int y) => SetCursorPos(x, y);
 
     public bool? TaskbarAutoHide() => TabletTaskbar.ReadMode() == TaskbarMode.Normal
         ? (Actions.Taskbar.TaskbarAutoHideAction.GetState() & Interop.Shell32.ABS_AUTOHIDE) != 0 : null;
@@ -90,8 +88,4 @@ public sealed class AgentModePlatform(ExternalMonitorService monitors) : IAgentM
     }
 
     public void ClearRecovery() => File.Delete(RecoveryPath);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetCursorPos(int x, int y);
 }

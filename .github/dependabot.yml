@@ -13,8 +13,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # The Windows App SDK components move together with an official release; the weekly
+    # Dependencies workflow (tools/check-windowsappsdk.ps1) reports a new one instead.
+    ignore:
+      - dependency-name: "Microsoft.WindowsAppSDK.*"
     groups:
-      windows-app-sdk:
-        patterns: ["Microsoft.WindowsAppSDK*"]
       tests:
         patterns: ["Microsoft.NET.Test.Sdk", "xunit*"]
