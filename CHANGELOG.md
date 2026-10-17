@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A **logo**: the app's bolt with the name in Outfit, horizontal and stacked, for
+  light and dark backgrounds.
+- A shorter **README** in English, with the project's history, panel screenshots,
+  acknowledgements and the dedication. Usage details moved to
+  [using Llampec](docs/USING.md), build and validation notes to
+  [development](docs/DEVELOPMENT.md).
+- About: the dedication now reads *Dedicat a Lara i a Miquel 🫶*.
 - Always on Top: windows **pinned by another application** (for example by an
   agent controlling the PC) are listed and can be unpinned from their row, the
   button or the shortcut, without Llampec claiming them. **Restore all** clears

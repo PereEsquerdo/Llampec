@@ -160,7 +160,7 @@ private async void ShowAbout()
             // A personal dedication, the same in every language.
             content.Children.Add(new TextBlock
             {
-                Text = "Dedicat a Lara i Miquel \U0001FAF6", FontStyle = Windows.UI.Text.FontStyle.Italic,
+                Text = "Dedicat a Lara i a Miquel \U0001FAF6", FontStyle = Windows.UI.Text.FontStyle.Italic,
                 TextWrapping = TextWrapping.Wrap,
             });
             content.Children.Add(new HyperlinkButton

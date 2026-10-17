@@ -52,6 +52,17 @@ that keeps the PC working and reachable with dark screens. Implemented as the
 External monitor and Agentic work modules; see [agentic work](docs/AGENT_MODE.md)
 for what is measured and what still needs hands-on validation.
 
+On 2026-10-17, before making the repository public, the user asked for all GitHub
+documentation in English and a short README written in a natural, first-person
+voice, with the details in [using](docs/USING.md) and [development](docs/DEVELOPMENT.md).
+Project history for the README: the first Llampec was an internal, text-only tool
+the user wrote in 2016 for a small development and design company, covering gaps in
+Windows of that time (pin windows, caffeine, monitor off, full screen, dark mode once
+Windows added it to Settings). The logo is the app icon's bolt beside or above the
+name in Outfit SemiBold (`docs/images`). The dedication is always exactly
+**Dedicat a Lara i a Miquel 🫶**, in Catalan in every language, in the README and
+the About page.
+
 Keep the original lightweight design: no recurring work for disposable layout
 controls, no idle polling for window features and no speculative memory trimming.
 The user considers the observed roughly 18 MB idle physical memory acceptable;

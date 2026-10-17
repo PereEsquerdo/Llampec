@@ -33,6 +33,14 @@ The battery byte layouts for HID++ features 0x1000 and 0x1004 were checked again
 [Solaar](https://github.com/pwr-Solaar/Solaar)'s protocol descriptions. Solaar is
 used only as a wire-format reference; no Solaar code is included.
 
-The packaging script includes these documents and the original license. Both
+## Outfit typeface
+
+The name in the Llampec logo (`docs/images/logo-*.svg`) is set in
+[Outfit](https://github.com/Outfitio/Outfit-Fonts) SemiBold, © 2021 The Outfit
+Project Authors, converted to outlines. Outfit is licensed under the
+[SIL Open Font License 1.1](third-party/Outfit.OFL.txt). No font file is bundled with
+Llampec; the app itself uses the Windows system fonts.
+
+The packaging script includes these documents and the original licenses. Both
 Llampec and the standalone Logitech probe also copy the notice into their
 build/publish output.
