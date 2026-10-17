@@ -98,6 +98,9 @@ previews a panel theme on a fresh launch without changing the saved preference.
 
 `docs/images` holds the logo, horizontal and stacked, for light and dark backgrounds:
 the app icon's bolt (`#FFC400`) and the name in Outfit SemiBold, converted to
-outlines so the files need no font. Outfit is under the
+outlines so the files need no font. The panel footer draws the same horizontal logo
+as XAML shapes (`BrandLogoTemplate` in `FlyoutWindow.xaml`, without the SVG padding),
+also used as the About title; regenerate both if the
+logo changes. Outfit is under the
 [SIL Open Font License](third-party/Outfit.OFL.txt). The panel screenshots show
 English and the light and dark themes over a neutral backdrop.

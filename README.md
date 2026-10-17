@@ -23,7 +23,7 @@
   </picture>
 </p>
 
-*Llampec* means "lightning" in Catalan. It sits next to the clock and gives you the
+*Llampec* means "lightning" in Catalan/Valencian. It sits next to the clock and gives you the
 switches Windows keeps hiding three menus deep, plus a few it never had. It stays out
 of the way: it only changes existing Windows settings, and while you're not using it
 it does nothing at all.
@@ -45,12 +45,12 @@ it does nothing at all.
   back.
 
 Arrange it your way: choose columns, make categories and drag buttons around, just
-like Windows Quick Settings. Llampec speaks English, Spanish and Catalan.
+like Windows Quick Settings. Llampec speaks English, Spanish and Catalan/Valencian.
 
 ## A bit of history
 
 The first Llampec was a small internal tool I made in 2016 for the development and
-design company I worked at. Windows 10 was missing a few things we needed every day,
+design company (Impuls). Windows 10 was missing a few things we needed every day,
 so I wrote them: pinning a window on top, a caffeine mode to keep the PC awake,
 turning off the monitor, full screen for any window and, once Windows finally added
 it to Settings, a dark mode switch. It was text only and did just those few things,

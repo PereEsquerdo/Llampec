@@ -21,6 +21,8 @@ public sealed partial class FlyoutWindow
         AutomationProperties.SetName(BackButton, T("Back"));
         AutomationProperties.SetName(MenuButton, T("Settings"));
         AutomationProperties.SetName(EditButton, T("Edit panel"));
+        AutomationProperties.SetName(FooterBrand, T("About Llampec"));
+        ToolTipService.SetToolTip(FooterBrand, T("About Llampec"));
         SaveEditorButton.Content = T("Save");
         CancelEditorButton.Content = T("Cancel");
     }
@@ -141,6 +143,26 @@ public sealed partial class FlyoutWindow
         Reposition();
     }
 
+    private void OnFooterBrand(object sender, RoutedEventArgs e) => ShowAbout();
+
+    /// <summary>The width of an About bullet's emoji column; its sub-items are indented by the same amount.</summary>
+    private const double AboutBulletIndent = 30;
+
+    /// <summary>An emoji followed by bold text, or a bold link.</summary>
+    private static Grid AboutBullet(string emoji, FrameworkElement text)
+    {
+        var row = new Grid { ColumnSpacing = 0 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(AboutBulletIndent) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.Children.Add(new TextBlock { Text = emoji, FontSize = 16, VerticalAlignment = VerticalAlignment.Center });
+        if (text is TextBlock block) { block.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; block.TextWrapping = TextWrapping.Wrap; }
+        else if (text is Control control) control.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        text.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        return row;
+    }
+
 private async void ShowAbout()
     {
         var assembly = typeof(App).Assembly;
@@ -157,33 +179,37 @@ private async void ShowAbout()
                 Text = $"{T("Version")} {version}\n{copyright}\n{T("Open-source software · MIT License")}",
                 TextWrapping = TextWrapping.Wrap,
             });
-            // A personal dedication, the same in every language.
-            content.Children.Add(new TextBlock
+            // Three bullets, each a colour emoji and bold text. The dedication is the same in every language.
+            content.Children.Add(AboutBullet("\U0001FAF6", new TextBlock { Text = "Dedicat a Lara i a Miquel" }));
+            content.Children.Add(AboutBullet("\U0001F4BB", new HyperlinkButton
             {
-                Text = "Dedicat a Lara i a Miquel \U0001FAF6", FontStyle = Windows.UI.Text.FontStyle.Italic,
-                TextWrapping = TextWrapping.Wrap,
-            });
-            content.Children.Add(new HyperlinkButton
-            {
-                Content = T("Source code on GitHub"), NavigateUri = new Uri("https://github.com/PereEsquerdo/Llampec"),
+                // The repository's page also leads to its releases.
+                Content = T("Code and updates on GitHub"), NavigateUri = new Uri("https://github.com/PereEsquerdo/Llampec"),
                 Padding = new Thickness(0),
-            });
-            content.Children.Add(new TextBlock { Text = T("Acknowledgements"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-            content.Children.Add(Note("Always on Top inspired by Microsoft PowerToys.", 0.75));
-            content.Children.Add(new HyperlinkButton
+            }));
+            var thanks = new StackPanel { Spacing = 4, Margin = new Thickness(AboutBulletIndent, 0, 0, 0) };
+            void Credit(string note, string link, string uri)
             {
-                Content = "Microsoft PowerToys · MIT", NavigateUri = new Uri("https://github.com/microsoft/PowerToys"),
-                Padding = new Thickness(0),
-            });
-            content.Children.Add(Note("Logitech HID++ feature code adapted from Mouser.", 0.75));
-            content.Children.Add(new HyperlinkButton
+                thanks.Children.Add(Note(note, 0.75));
+                thanks.Children.Add(new HyperlinkButton { Content = link, NavigateUri = new Uri(uri), Padding = new Thickness(0), Margin = new Thickness(0, 0, 0, 6) });
+            }
+            Credit("Always on Top inspired by Microsoft PowerToys.", "Microsoft PowerToys · MIT", "https://github.com/microsoft/PowerToys");
+            Credit("Logitech HID++ feature code adapted from Mouser.", "Mouser · MIT", "https://github.com/TomBadash/Mouser");
+            Credit("Logo typeface: Outfit.", "Outfit · OFL", "https://github.com/Outfitio/Outfit-Fonts");
+            var acknowledgements = new StackPanel { Spacing = 8 };
+            acknowledgements.Children.Add(AboutBullet("\U0001F91D", new TextBlock { Text = T("Acknowledgements") }));
+            acknowledgements.Children.Add(thanks);
+            content.Children.Add(acknowledgements);
+            // The logo as the title; the dialog keeps its accessible name.
+            var logo = new ContentControl
             {
-                Content = "Mouser · MIT", NavigateUri = new Uri("https://github.com/TomBadash/Mouser"),
-                Padding = new Thickness(0),
-            });
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme,
-                Title = T("About Llampec"), Content = content,
-                CloseButtonText = T("Close") }.ShowAsync();
+                ContentTemplate = (DataTemplate)Root.Resources["BrandLogoTemplate"], Height = 28,
+                HorizontalAlignment = HorizontalAlignment.Left, IsTabStop = false, Margin = new Thickness(0, 4, 0, 4),
+            };
+            var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme,
+                Title = logo, Content = content, CloseButtonText = T("Close") };
+            AutomationProperties.SetName(dialog, T("About Llampec"));
+            await dialog.ShowAsync();
         }
         finally { Hold(false); }
     }

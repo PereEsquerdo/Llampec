@@ -8,7 +8,12 @@
   acknowledgements and the dedication. Usage details moved to
   [using Llampec](docs/USING.md), build and validation notes to
   [development](docs/DEVELOPMENT.md).
-- About: the dedication now reads *Dedicat a Lara i a Miquel 🫶*.
+- About: the logo as its title, then three bold bullets with an emoji each: the
+  dedication *Dedicat a Lara i a Miquel* (🫶), **Code and updates on GitHub** (💻)
+  instead of "Source code", and acknowledgements (🤝) indented below, now also
+  crediting the Outfit typeface of the logo.
+- The panel footer shows the logo instead of the plain name; clicking it opens
+  About. Both use one vector template, drawn like an icon, with no image or font.
 - Always on Top: windows **pinned by another application** (for example by an
   agent controlling the PC) are listed and can be unpinned from their row, the
   button or the shortcut, without Llampec claiming them. **Restore all** clears
