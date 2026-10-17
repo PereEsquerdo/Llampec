@@ -119,3 +119,26 @@ Windows 11 Home cannot host Remote Desktop. With agent mode active:
 - **Desktop viewers** (Chrome Remote Desktop, RustDesk and similar) show the console
   session. With the session unlocked they see the desktop beneath the covers and
   their input does not end the mode.
+
+## Idea: a virtual display (not implemented)
+
+Discussed on 2026-10-17. With only the built-in display, the panel cannot be switched
+off without Windows entering standby, so agent mode covers it with black. A virtual
+display would remove that limit: Windows supports them through Indirect Display
+Drivers (IddCx, user-mode, also on ARM64). With one active, agent mode already does the
+right thing, as with an external monitor: Second screen only switches the OLED off for
+real, Windows still has a display on (no standby, no lock), and agents and remote
+tools use the virtual desktop. No cover or taskbar workaround is needed.
+
+Installing a driver needs administrator rights and adds third-party signed code, which
+is outside Llampec's scope, so Llampec would not install one. The plan instead:
+
+- The agent mode options link to an open-source virtual display driver, for example
+  [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver)
+  (MIT), for whoever wants to install it.
+- When such a display exists, agent mode activates it only while active, as the
+  display that stays on, and deactivates it on exit with `SetDisplayConfig`, which
+  needs no administrator rights. Outside agent mode it stays inactive, so no window
+  can be lost on it. It is not covered and gets no DDC/CI standby.
+- To check first: the driver on the Surface ARM64, consumption with the physical panel
+  off, and how its target is identified (output technology) without guessing by name.
