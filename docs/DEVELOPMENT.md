@@ -91,6 +91,13 @@ feature's document records what was measured and what is still open.
 
 ## Validation records
 
+- **2026-10-18, ARM64 (Surface, Debug build with all eighteen modules):** idle in the
+  background, 12.4 MB private working set (Task Manager's "Memory"), 23.8 MB total
+  working set, 86.1 MB committed, 0 CPU seconds over 35 s. After ten panel open/close
+  cycles and the idle trim: 9.6 MB private, 13.4 MB total, 86.6 MB committed, 0 CPU,
+  18 threads and 980 handles (988 before), so repeated use leaves nothing behind. The
+  optimization review found no idle work in the new modules; agent mode now reuses one
+  raw-input buffer instead of allocating one per mouse event while active.
 - **2026-10-17, ARM64 (Surface, build 28000):** 549 Core tests passed (1 opt-in
   skipped); the Always on Top smoke test passed 89 native checks. ARM64 and x64 Debug
   builds without errors. External monitor, agentic work and monitor recovery were

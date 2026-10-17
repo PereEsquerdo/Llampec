@@ -55,6 +55,8 @@ public sealed class AgentScreen : IAgentScreen
     private readonly nint _foregroundHook;
     private readonly List<nint> _covers = [];
     private nint _park;
+    private nint _inputBuffer;
+    private uint _inputBufferSize;
     private int _parkX, _parkY;
     private readonly uint _reparkAfter;
     private const nuint ReparkTimer = 1;
@@ -268,8 +270,9 @@ public sealed class AgentScreen : IAgentScreen
         uint size = 0;
         uint header = (uint)Marshal.SizeOf<RawInputHeader>();
         if (GetRawInputData(rawInput, 0x10000003, 0, ref size, header) != 0 || size == 0) return false; // RID_INPUT
-        nint buffer = Marshal.AllocHGlobal((int)size);
-        try
+        // One buffer for the whole session: an agent moving the mouse sends hundreds of events a second.
+        if (size > _inputBufferSize) { Marshal.FreeHGlobal(_inputBuffer); _inputBuffer = Marshal.AllocHGlobal((int)size); _inputBufferSize = size; }
+        nint buffer = _inputBuffer;
         {
             if (GetRawInputData(rawInput, 0x10000003, buffer, ref size, header) != size) return false;
             var head = Marshal.PtrToStructure<RawInputHeader>(buffer);
@@ -291,7 +294,6 @@ public sealed class AgentScreen : IAgentScreen
                     return true;
             }
         }
-        finally { Marshal.FreeHGlobal(buffer); }
     }
 
     private void RemovePark()
@@ -313,6 +315,8 @@ public sealed class AgentScreen : IAgentScreen
         if (_host != 0) KillTimer(_host, ReparkTimer);
         RemoveCovers();
         RemovePark();
+        Marshal.FreeHGlobal(_inputBuffer);
+        _inputBuffer = 0;
         if (_foregroundHook != 0) UnhookWinEvent(_foregroundHook);
         if (_powerNotification != 0) UnregisterPowerSettingNotification(_powerNotification);
         if (_inputRegistered)
