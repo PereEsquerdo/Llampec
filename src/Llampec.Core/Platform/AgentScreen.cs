@@ -39,7 +39,8 @@ public interface IAgentScreen : IDisposable
 /// <item>A pointer parking window. A still pointer would mark an OLED, and over another window it shows
 /// that window's hover effects and tooltips (a red Close button, for one). Over this small black window,
 /// which answers WM_SETCURSOR with no cursor and does not activate, nothing is drawn. Moving the mouse
-/// away, as an agent or remote tool does, restores the normal pointer.</item>
+/// away, as an agent or remote tool does, restores the normal pointer; once the mouse has been still
+/// for a while, the pointer goes back there, so the spot an agent last used is not left lit.</item>
 /// </list>
 /// </summary>
 public sealed class AgentScreen : IAgentScreen
@@ -54,6 +55,9 @@ public sealed class AgentScreen : IAgentScreen
     private readonly nint _foregroundHook;
     private readonly List<nint> _covers = [];
     private nint _park;
+    private int _parkX, _parkY;
+    private readonly uint _reparkAfter;
+    private const nuint ReparkTimer = 1;
     private readonly long _ignoreInputUntil;
     private bool _inputRegistered;
     private bool _displayWasOff;
@@ -64,8 +68,10 @@ public sealed class AgentScreen : IAgentScreen
     public event EventHandler? DisplayTurnedOn;
 
     /// <param name="grace">Input ignored after activation, such as releasing the tap that started the mode.</param>
-    public AgentScreen(TimeSpan grace)
+    /// <param name="reparkAfter">How long the mouse must be still before the pointer returns to its parking window.</param>
+    public AgentScreen(TimeSpan grace, TimeSpan reparkAfter)
     {
+        _reparkAfter = (uint)Math.Clamp(reparkAfter.TotalMilliseconds, 100, int.MaxValue);
         _wndProc = WindowProcedure;
         _foregroundProc = (_, _, _, _, _, _, _) => Raise();
         _ignoreInputUntil = Environment.TickCount64 + (long)grace.TotalMilliseconds;
@@ -163,7 +169,24 @@ public sealed class AgentScreen : IAgentScreen
             }
         }
         else User32.SetWindowPos(_park, -1, left, top, ParkSize, ParkSize, User32.SWP_NOACTIVATE);
+        (_parkX, _parkY) = (x, y);
         SetCursorPos(x, y);
+    }
+
+    /// <summary>
+    /// The mouse moved (an agent or remote tool; physical input ends the mode): one timer, restarted by
+    /// each movement, returns the pointer to the parking window once the mouse is still.
+    /// </summary>
+    private void OnPointerMoved()
+    {
+        if (_park != 0) SetTimer(_host, ReparkTimer, _reparkAfter, 0);
+    }
+
+    private void Repark()
+    {
+        KillTimer(_host, ReparkTimer);
+        if (_park == 0 || !GetCursorPos(out var point) || (point.X == _parkX && point.Y == _parkY)) return;
+        SetCursorPos(_parkX, _parkY); // Generates no raw input, so it does not restart the timer.
     }
 
     public void LeaveTaskbar()
@@ -215,8 +238,10 @@ public sealed class AgentScreen : IAgentScreen
         {
             if (msg == 0x00FF && hWnd == _host) // WM_INPUT
             {
-                if (IsPhysicalInput(lParam) && Environment.TickCount64 >= _ignoreInputUntil) PhysicalInput?.Invoke(this, EventArgs.Empty);
+                if (IsPhysicalInput(lParam, out bool mouse) && Environment.TickCount64 >= _ignoreInputUntil) PhysicalInput?.Invoke(this, EventArgs.Empty);
+                else if (mouse) OnPointerMoved();
             }
+            else if (msg == 0x0113 && hWnd == _host && wParam == ReparkTimer) { Repark(); return 0; } // WM_TIMER
             else if (msg == 0x0218 && wParam == 0x8013 && lParam != 0) // WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE
             {
                 var setting = Marshal.PtrToStructure<PowerBroadcastSetting>(lParam);
@@ -236,8 +261,10 @@ public sealed class AgentScreen : IAgentScreen
         return User32.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
-    private bool IsPhysicalInput(nint rawInput)
+    /// <param name="mouse">Whether the event came from a mouse, physical or synthesized.</param>
+    private bool IsPhysicalInput(nint rawInput, out bool mouse)
     {
+        mouse = false;
         uint size = 0;
         uint header = (uint)Marshal.SizeOf<RawInputHeader>();
         if (GetRawInputData(rawInput, 0x10000003, 0, ref size, header) != 0 || size == 0) return false; // RID_INPUT
@@ -246,6 +273,7 @@ public sealed class AgentScreen : IAgentScreen
         {
             if (GetRawInputData(rawInput, 0x10000003, buffer, ref size, header) != size) return false;
             var head = Marshal.PtrToStructure<RawInputHeader>(buffer);
+            mouse = head.Type == 0; // RIM_TYPEMOUSE
             if (head.Device == 0) return false; // SendInput: an agent, a remote-desktop tool, or Llampec itself
             int data = Marshal.SizeOf<RawInputHeader>();
             switch (head.Type)
@@ -282,6 +310,7 @@ public sealed class AgentScreen : IAgentScreen
     {
         if (_disposed) return;
         _disposed = true;
+        if (_host != 0) KillTimer(_host, ReparkTimer);
         RemoveCovers();
         RemovePark();
         if (_foregroundHook != 0) UnhookWinEvent(_foregroundHook);
@@ -361,6 +390,14 @@ public sealed class AgentScreen : IAgentScreen
     private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")]
     private static extern nint SetCursor(nint cursor);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out User32.POINT point);
+    [DllImport("user32.dll")]
+    private static extern nuint SetTimer(nint window, nuint id, uint milliseconds, nint callback);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool KillTimer(nint window, nuint id);
     private delegate bool EnumWindowsProc(nint window, nint data);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

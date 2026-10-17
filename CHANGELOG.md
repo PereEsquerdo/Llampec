@@ -6,7 +6,8 @@
   it again on exit: the taskbar, also topmost, stayed lit above the cover on a
   single OLED display. If the taskbar has focus, which keeps it showing, focus moves to
   the topmost app. The pointer is hidden on a small window of its own, so no app shows
-  hover effects or tooltips under it.
+  hover effects or tooltips under it, and returns there after a minute without mouse
+  movement, when an agent has left it elsewhere.
 - The Windows App SDK components follow an official release (2.5.1): CI checks that
   they match it, and a weekly workflow reports a newer release.
 - Maintenance: CI actions off the deprecated Node.js 20 (`checkout@v7`,

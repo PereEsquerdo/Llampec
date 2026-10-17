@@ -59,7 +59,8 @@ public sealed class AgentModePlatform(ExternalMonitorService monitors) : IAgentM
     }
 
     public Task<IReadOnlyList<DdcMonitor>> SetMonitorPowerAsync(IEnumerable<DdcMonitor> targets, bool on) => monitors.SetPowerAsync(targets, on);
-    public IAgentScreen CreateScreen() => new AgentScreen(TimeSpan.FromSeconds(1));
+    /// <summary>A minute without movement: long enough not to move the pointer while an agent is mid-task.</summary>
+    public IAgentScreen CreateScreen() => new AgentScreen(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(1));
 
     public bool? TaskbarAutoHide() => TabletTaskbar.ReadMode() == TaskbarMode.Normal
         ? (Actions.Taskbar.TaskbarAutoHideAction.GetState() & Interop.Shell32.ABS_AUTOHIDE) != 0 : null;

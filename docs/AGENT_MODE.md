@@ -57,6 +57,11 @@ Llampec restores everything at the sign-in screen.
   no cursor, so nothing is drawn: on a monitor in standby, or at the middle of a covered
   display's top edge, away from the bottom edge that would reveal the hidden taskbar.
   Moving the mouse away, as an agent or remote tool does, restores the normal pointer.
+  Once the mouse has been still for a minute, the pointer returns to the parking window,
+  so the spot an agent last used (often a button with its hover state or tooltip) is
+  not left lit. Each movement, synthesized or not, restarts one timer; physical input
+  ends the mode anyway. Measured with a 2 s delay: two `SendInput` moves produced no
+  physical-input event, and the pointer was back and hidden after the delay.
 - **A single built-in display.** It cannot be switched off while Windows keeps the
   session awake: Windows needs one active display, and turning the screen off on
   demand enters standby (see [caffeine](CAFFEINE.md)). Agent mode covers it with
