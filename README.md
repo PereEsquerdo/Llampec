@@ -25,7 +25,7 @@
 
 *Llampec* means "lightning" in Catalan/Valencian. It sits next to the clock and gives you the
 switches Windows keeps hiding three menus deep, plus a few it never had. It stays out
-of the way: it only changes existing Windows settings, and while you're not using it
+of the way: it only changes existing Windows settings, and while you're not using it,
 it does nothing at all.
 
 ## What it does
