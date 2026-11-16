@@ -92,6 +92,12 @@ feature's document records what was measured and what is still open.
 
 ## Validation records
 
+- **2026-11-16, ARM64 (Surface, build 28000, .NET SDK 10.0.404), 0.2.0-beta.1:** after
+  the update to Windows App SDK 2.6.5 and the idle changes, 554 Core tests passed (1
+  opt-in skipped) and the Always on Top smoke test passed 89 native checks; CI built
+  and tested both architectures. ARM64 and x64 Release packages and installers built
+  without warnings and passed the resource check: 38.5 and 39.3 MB archives (alpha.9:
+  38.1 MB on x64), the growth coming from the Windows App SDK binaries.
 - **2026-10-18, ARM64 (Surface, Debug build with all eighteen modules):** idle in the
   background, 12.4 MB private working set (Task Manager's "Memory"), 23.8 MB total
   working set, 86.1 MB committed, 0 CPU seconds over 35 s. After ten panel open/close

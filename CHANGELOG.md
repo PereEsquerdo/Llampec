@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-beta.1 — 2026-11-16
+
+The first beta: every module from the alphas, plus External monitor and Agentic work,
+on Windows App SDK 2.6.5.
 
 - Agentic work hides the taskbar automatically while it covers a display, and shows
   it again on exit: the taskbar, also topmost, stayed lit above the cover on a
