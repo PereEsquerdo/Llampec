@@ -8,12 +8,14 @@
   the topmost app. The pointer is hidden on a small window of its own, so no app shows
   hover effects or tooltips under it, and returns there after a minute without mouse
   movement, when an agent has left it elsewhere.
-- The Windows App SDK components follow an official release (2.5.1): CI checks that
-  they match it, and a weekly workflow reports a newer release.
+- **Windows App SDK 2.6.5** (WinUI, Foundation and InteractiveExperiences), with
+  Microsoft's fixes for rendering with several adapters or monitors and for crash
+  reports. The components follow an official release: CI checks that they match it,
+  and a weekly workflow reports a newer release.
 - Maintenance: CI actions off the deprecated Node.js 20 (`checkout@v7`,
   `setup-dotnet@v6`, `upload-artifact@v7`), tests on xUnit v3 with
-  Microsoft.Testing.Platform, Windows App SDK WinUI 2.3.9 and Foundation 2.3.12,
-  and Dependabot for weekly action and NuGet updates.
+  Microsoft.Testing.Platform (Microsoft.NET.Test.Sdk 18.12.0, xUnit v3 4.0.3), and
+  Dependabot for weekly action and NuGet updates.
 - A **logo**: the app's bolt with the name in Outfit, horizontal and stacked, for
   light and dark backgrounds.
 - A shorter **README** in English, with the project's history, panel screenshots,

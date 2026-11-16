@@ -56,8 +56,9 @@ Llampec references three Windows App SDK components (WinUI, Foundation,
 InteractiveExperiences) rather than the `Microsoft.WindowsAppSDK` metapackage, whose AI,
 ML, Search and Widgets binaries would add about 40 MB. The metapackage still defines which
 component versions make up an official release, and the components' own packages can
-disagree with it: WinUI 2.3.9 asks for InteractiveExperiences 2.1.8, which was never
-published, while release 2.5.1 declares 2.1.9.
+disagree with it: WinUI 2.3.9 asked for InteractiveExperiences 2.1.8, which was never
+published, while release 2.5.1 declared 2.1.9. Since release 2.6 the three components
+share the release's version (2.6.5).
 
 So the app follows an official release, named in `<WindowsAppSdkRelease>` in
 `Llampec.App.csproj`. `tools/check-windowsappsdk.ps1` downloads that release's manifest

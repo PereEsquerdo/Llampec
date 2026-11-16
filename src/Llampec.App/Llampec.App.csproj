@@ -19,17 +19,17 @@
     <!-- The Windows App SDK release these components come from. tools/check-windowsappsdk.ps1 (run by CI)
          requires each Microsoft.WindowsAppSDK.* version below to match that release's metapackage, and the
          weekly dependencies workflow reports a newer release. Update the release and all three together. -->
-    <WindowsAppSdkRelease>2.5.1</WindowsAppSdkRelease>
+    <WindowsAppSdkRelease>2.6.5</WindowsAppSdkRelease>
   </PropertyGroup>
   <ItemGroup>
     <!-- WinUI and Foundation only (with their Base, InteractiveExperiences and WebView2
          dependencies). The Microsoft.WindowsAppSDK metapackage also ships AI, ML, Search,
          Widgets and DWriteCore binaries that Llampec never loads: about 40 MB per build. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
-    <!-- Listed explicitly: WinUI 2.3.9's own package asks for 2.1.8, which was never published, while the
-         2.5.1 release declares 2.1.9. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.5" />
+    <!-- Listed explicitly so the release check covers it too: WinUI 2.3.9 once asked for an
+         InteractiveExperiences version that was never published. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.6.5" />
     <ProjectReference Include="..\Llampec.Core\Llampec.Core.csproj" />
     <Using Include="System.Runtime.InteropServices" />
     <Using Include="Llampec.Flyout.PanelControls" Static="true" />
