@@ -38,8 +38,8 @@ public sealed class AlwaysOnTopService : IDisposable
     private IReadOnlyList<PinnableWindow> _availableWindows = [];
     private WindowIdentity? _lastExternal;
     private WindowIdentity? _target;
-    private bool _targetFrozen, _mutating, _refreshing, _refreshQueued, _disposed, _notifying, _notifyAgain;
-    private (WindowIdentity? Target, string Title, bool Pinned, string? Error)? _publishedState;
+    private bool _targetFrozen, _listingWindows, _mutating, _refreshing, _refreshQueued, _disposed, _notifying, _notifyAgain;
+    private (WindowIdentity? Target, string Title, bool Pinned, string? Error, int PinCount)? _publishedState;
     private IReadOnlyList<PinnableWindow> _publishedWindows = [];
 
     public event EventHandler? Changed;
@@ -82,6 +82,7 @@ public sealed class AlwaysOnTopService : IDisposable
         RememberForeground();
         _target = _lastExternal;
         _targetFrozen = true;
+        _listingWindows = true;
         Refresh();
     }
 
@@ -89,12 +90,18 @@ public sealed class AlwaysOnTopService : IDisposable
     {
         if (_disposed) return;
         _targetFrozen = false;
+        // Nobody sees the selector until the panel opens again; keep no copy of every window.
+        _listingWindows = false;
+        _availableWindows = [];
+        _availableIdentities = [];
+        OtherAppPinCount = 0;
         Refresh();
     }
 
     public IReadOnlyList<PinnableWindow> GetWindows()
     {
-        Refresh();
+        _listingWindows = true;
+        Refresh(listRequested: true);
         // Refresh notifications can arrive while existing rows are still displayed. Update the
         // action identities only when the UI actually requests a replacement row snapshot.
         _selectorIdentities = _availableIdentities;
@@ -408,7 +415,14 @@ public sealed class AlwaysOnTopService : IDisposable
         else if (!_windows.IsTrackingForeground || (_lastExternal is { } last && ReadMatching(last) is not { IsEligible: true })) _lastExternal = null;
     }
 
-    public void Refresh()
+    public void Refresh() => Refresh(listRequested: false);
+
+    /// <summary>
+    /// Every window in the session is listed only from the moment the panel opens or the list is
+    /// requested until the panel hides: otherwise a pinned window's title changes (a terminal, a
+    /// player) would enumerate them all. A requested list reaches its caller, so it raises no event.
+    /// </summary>
+    private void Refresh(bool listRequested)
     {
         if (_disposed || _mutating || _refreshing) return;
         _refreshing = true;
@@ -421,30 +435,36 @@ public sealed class AlwaysOnTopService : IDisposable
             if (targetWindow is not { IsEligible: true }) _target = null;
             TargetTitle = _target is null ? string.Empty : targetWindow!.Title;
             IsTargetPinnedByOtherApp = _target is not null && targetWindow!.IsTopmost && !IsTargetPinned;
-
-            var identities = new Dictionary<nint, WindowIdentity>();
-            var available = new List<PinnableWindow>();
-            foreach (var pin in _pins.Values)
-            {
-                identities[pin.Identity.Handle] = pin.Identity;
-                available.Add(new(pin.Identity.Handle, pin.Title, true));
-            }
-            int otherApps = 0;
-            foreach (var window in _windows.Enumerate())
-            {
-                if (!window.IsEligible || identities.ContainsKey(window.Identity.Handle)) continue;
-                identities[window.Identity.Handle] = window.Identity;
-                available.Add(new(window.Identity.Handle, window.Title, window.IsTopmost, window.IsTopmost));
-                if (window.IsTopmost) otherApps++;
-            }
-            OtherAppPinCount = otherApps;
-            _availableIdentities = identities;
-            // Llampec's pins, then other applications' pins, then the rest, each by title.
-            _availableWindows = available.OrderByDescending(w => w.IsPinned && !w.PinnedByOtherApp).ThenByDescending(w => w.PinnedByOtherApp)
-                .ThenBy(w => w.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
+            // The hidden selector keeps its last list (emptied by ReleaseTarget); GetWindows rebuilds it.
+            if (_listingWindows) ListWindows();
+            if (listRequested) _publishedWindows = _availableWindows;
         }
         finally { _refreshing = false; }
         PublishIfChanged();
+    }
+
+    private void ListWindows()
+    {
+        var identities = new Dictionary<nint, WindowIdentity>();
+        var available = new List<PinnableWindow>();
+        foreach (var pin in _pins.Values)
+        {
+            identities[pin.Identity.Handle] = pin.Identity;
+            available.Add(new(pin.Identity.Handle, pin.Title, true));
+        }
+        int otherApps = 0;
+        foreach (var window in _windows.Enumerate())
+        {
+            if (!window.IsEligible || identities.ContainsKey(window.Identity.Handle)) continue;
+            identities[window.Identity.Handle] = window.Identity;
+            available.Add(new(window.Identity.Handle, window.Title, window.IsTopmost, window.IsTopmost));
+            if (window.IsTopmost) otherApps++;
+        }
+        OtherAppPinCount = otherApps;
+        _availableIdentities = identities;
+        // Llampec's pins, then other applications' pins, then the rest, each by title.
+        _availableWindows = available.OrderByDescending(w => w.IsPinned && !w.PinnedByOtherApp).ThenByDescending(w => w.PinnedByOtherApp)
+            .ThenBy(w => w.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
     }
 
     private void OnWindowChanged(WindowChange change)
@@ -505,7 +525,8 @@ public sealed class AlwaysOnTopService : IDisposable
     private void PublishIfChanged()
     {
         UpdateWindowTracking();
-        var state = (_target, TargetTitle, IsTargetPinned || IsTargetPinnedByOtherApp, Error);
+        // The pin count is part of the state: with the panel hidden the window list is not rebuilt.
+        var state = (_target, TargetTitle, IsTargetPinned || IsTargetPinnedByOtherApp, Error, _pins.Count);
         if (_publishedState == state && _publishedWindows.SequenceEqual(_availableWindows)) return;
         _publishedState = state;
         _publishedWindows = _availableWindows;

@@ -57,7 +57,10 @@ window destruction session-wide: a process-scoped hook ends with its process and
 can miss the destruction of a window whose app exits on close (the native smoke
 test caught this). Moves, carets and title changes elsewhere therefore no longer
 wake Llampec while a window stays pinned. Bursts of window events with the panel
-open are coalesced into one window enumeration. A pinned window's own moves are
+open are coalesced into one window enumeration. With the panel hidden nothing is
+enumerated: a pinned window's own events (a terminal or player renaming itself all
+day) re-read only the pins and the target, and the window list is dropped until the
+panel opens again. A pinned window's own moves are
 checked with an identity and TOPMOST read, not a full snapshot. Every owned
 pin has a process/thread identity and a Llampec-specific native ownership marker;
 unpinning checks both. Windows already topmost before a request are not claimed.

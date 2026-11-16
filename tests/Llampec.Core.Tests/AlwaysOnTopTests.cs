@@ -725,7 +725,36 @@ public sealed class AlwaysOnTopTests
         windows.Move(1);
         Assert.Equal(0, service.PinnedCount);
         Assert.Equal(ActionState.Off, action.State);
+        // With the panel hidden, the lost pin is detected without listing every window.
+        Assert.Equal(enumerations, windows.Enumerations);
+    }
+
+    [Fact]
+    public void HiddenPinnedWindowEventsDoNotListEveryWindow()
+    {
+        var windows = new Windows();
+        using var service = Create(windows);
+        int notifications = 0;
+        service.Changed += (_, _) => notifications++;
+        service.ToggleTarget();
+        Assert.Equal(1, service.PinnedCount);
+        int enumerations = windows.Enumerations;
+        // A pinned terminal or player renames its window all day long.
+        for (int i = 0; i < 20; i++) windows.Notify(1);
+        Assert.Equal(enumerations, windows.Enumerations);
+
+        // A pinned window that closes while the panel is hidden is still reported.
+        notifications = 0;
+        windows.Items.Remove(1);
+        windows.Notify(1);
+        Assert.Equal(0, service.PinnedCount);
+        Assert.Equal(1, notifications);
+        Assert.Equal(enumerations, windows.Enumerations);
+
+        // Opening the panel lists the windows again.
+        service.CaptureTarget();
         Assert.Equal(enumerations + 1, windows.Enumerations);
+        Assert.NotEmpty(service.GetWindows());
     }
 
     [Fact]

@@ -153,10 +153,15 @@ public partial class App : Application
                     if (_exiting) return;
                     try
                     {
-                        Rotation?.Refresh();
-                        Fullscreen?.OnEnvironmentChanged();
-                        // Hidden tiles are refreshed when the panel opens.
-                        if (window.AppWindow.IsVisible)
+                        // Hidden tiles, rotation included, are refreshed when the panel opens. Only an
+                        // active fullscreen session must react now (and names its monitor from rotation).
+                        bool visible = window.AppWindow.IsVisible;
+                        if (visible || Fullscreen?.IsActive == true)
+                        {
+                            Rotation?.Refresh();
+                            Fullscreen?.OnEnvironmentChanged();
+                        }
+                        if (visible)
                             foreach (var tile in model.Tiles.Where(t => t.Id is "taskbar-autohide" or "touch-taskbar")) tile.Refresh();
                         window.OnDisplayEnvironmentChanged();
                     }
@@ -260,7 +265,6 @@ public partial class App : Application
     }
     public bool IsPointerPressOnTrayIcon() => _tray?.IsPointerOverIcon() == true
         && (Llampec.Interop.User32.GetAsyncKeyState(0x01) < 0 || Llampec.Interop.User32.GetAsyncKeyState(0x02) < 0);
-    public void SaveSettings() => SettingsStore.Save(Settings);
 
     /// <summary>Observes the camera while the panel is visible; opening it also retries a disconnected mouse.</summary>
     public void SetPanelVisible(bool visible)

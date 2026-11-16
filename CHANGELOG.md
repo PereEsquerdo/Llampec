@@ -8,6 +8,11 @@
   the topmost app. The pointer is hidden on a small window of its own, so no app shows
   hover effects or tooltips under it, and returns there after a minute without mouse
   movement, when an agent has left it elsewhere.
+- **Lighter while idle:** with the panel hidden, a pinned window's events (for
+  example a terminal or player that renames itself constantly) no longer make
+  Always on Top enumerate every window in the session, and display or setting
+  broadcasts no longer re-read rotation and fullscreen state unless a fullscreen
+  session is active. The panel re-reads both when it opens.
 - **Windows App SDK 2.6.5** (WinUI, Foundation and InteractiveExperiences), with
   Microsoft's fixes for rendering with several adapters or monitors and for crash
   reports. The components follow an official release: CI checks that they match it,

@@ -1,6 +1,6 @@
 ; Inno Setup script for a per-user Llampec installation (no administrator rights).
 ; Built by tools/package.ps1, which passes the published folder and version:
-;   ISCC /DAppVersion=0.2.0-alpha.9 /DFileVersion=0.2.0.9 /DArch=arm64 /DSourceDir=<publish folder> /DOutputDir=<folder> Llampec.iss
+;   ISCC /DAppVersion=0.2.0-beta.1 /DFileVersion=0.2.0.101 /DArch=arm64 /DSourceDir=<publish folder> /DOutputDir=<folder> Llampec.iss
 
 #ifndef AppVersion
   #error Pass /DAppVersion=<version>.

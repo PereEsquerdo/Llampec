@@ -40,8 +40,10 @@ $iscc = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source,
     (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 if ($iscc) {
-    # Windows file versions are numeric: 0.2.0-alpha.9 becomes 0.2.0.9.
-    $fileVersion = $version.Split('-')[0] + '.' + $(if ($version -match '\.(\d+)$') { $Matches[1] } else { '0' })
+    # Windows file versions are numeric and should keep increasing across stages:
+    # 0.2.0-alpha.9 becomes 0.2.0.9, 0.2.0-beta.1 0.2.0.101, 0.2.0-rc.1 0.2.0.201 and 0.2.0 0.2.0.1000.
+    $stage = if ($version -match '-(alpha|beta|rc)\.(\d+)$') { @{ alpha = 0; beta = 100; rc = 200 }[$Matches[1]] + [int]$Matches[2] } else { 1000 }
+    $fileVersion = $version.Split('-')[0] + ".$stage"
     $arch = $RuntimeIdentifier.Substring(4)
     & $iscc /Q "/DAppVersion=$version" "/DFileVersion=$fileVersion" "/DArch=$arch" "/DSourceDir=$output" `
         "/DOutputDir=$(Join-Path $root 'publish')" (Join-Path $root 'installer/Llampec.iss')
